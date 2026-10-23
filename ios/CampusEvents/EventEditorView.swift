@@ -84,7 +84,7 @@ struct EventEditorView: View {
             }.navigationTitle(existing == nil ? "创建活动" : "编辑活动").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .topBarLeading) { Button("取消") { dismiss() } } }
                 .onAppear { load() }
-                .onChange(of: start) { old, new in end = max(end.addingTimeInterval(new.timeIntervalSince(old)), new.addingTimeInterval(3600)); deadline = min(deadline.addingTimeInterval(new.timeIntervalSince(old)), new) }
+                .onChange(of: start) { _, new in if end <= new { end = new.addingTimeInterval(7200) }; if deadline > new { deadline = new } }
                 .onChange(of: coverPicker) { _, item in Task { await loadImage(item, isGroup: false) } }
                 .onChange(of: groupPicker) { _, item in Task { await loadImage(item, isGroup: true) } }
                 .alert("请检查活动信息", isPresented: Binding(get: { localError != nil }, set: { if !$0 { localError = nil } })) { Button("知道了") { localError = nil } } message: { Text(localError ?? "") }
@@ -111,7 +111,7 @@ struct EventEditorView: View {
         if !store.state.consented { localError = "请先在「我的 → 校园身份」中阅读并同意服务说明，再发布活动。"; return }
         var event = existing ?? CampusEvent(title: title, summary: summary, description: description, category: category, location: location, start: start, end: end, deadline: deadline, hostID: store.profile.id, host: host, cover: cover)
         event.title = title.trimmingCharacters(in: .whitespacesAndNewlines); event.summary = summary; event.description = description; event.category = category; event.campus = campus; event.location = location; event.start = start; event.end = end; event.deadline = deadline; event.host = host.isEmpty ? store.profile.name : host; event.cover = cover; event.imageData = imageData; event.capacity = capacity; event.requiresApproval = approval; event.allowWaitlist = waitlist; event.group = groupEnabled ? group : EventGroup(); event.agenda = agenda.split(separator: "\n").map(String.init)
-        do { try EventRules.validate(event) } catch { localError = error.localizedDescription; return }
+        do { try EventRules.validate(event, allowPastStart: existing?.start == event.start) } catch { localError = error.localizedDescription; return }
         if store.publish(event) { dismiss() } else { localError = store.error; store.error = nil }
     }
 }

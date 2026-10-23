@@ -40,6 +40,7 @@ struct WelcomeView: View {
     @Environment(AppStore.self) private var store
     @State private var consent = false
     @State private var service = false
+    @State private var onboarding = false
     var body: some View {
         VStack(spacing: 0) {
             HStack { Label("长沙理工大学", systemImage: "building.columns").font(.subheadline.weight(.medium)); Spacer(); Text("CSUST").font(.caption.monospaced()).foregroundStyle(.secondary) }.padding(26)
@@ -56,7 +57,7 @@ struct WelcomeView: View {
             }
             Spacer(minLength: 35)
             VStack(spacing: 17) {
-                Button { store.enter(consent: consent) } label: { Text("开始体验").frame(maxWidth: .infinity) }.buttonStyle(PrimaryButton()).disabled(!consent).accessibilityIdentifier("welcome.start")
+                Button { onboarding = true } label: { Text("开始体验").frame(maxWidth: .infinity) }.buttonStyle(PrimaryButton()).disabled(!consent).accessibilityIdentifier("welcome.start")
                 Button("先逛逛") { store.enter(consent: false) }.font(.subheadline.weight(.medium)).accessibilityIdentifier("welcome.browse")
                 HStack(alignment: .center, spacing: 8) {
                     Button { consent.toggle() } label: { Image(systemName: consent ? "checkmark.square.fill" : "square").font(.title3).foregroundStyle(consent ? Color.ink : .secondary) }.accessibilityLabel("同意服务说明").accessibilityValue(consent ? "已选中" : "未选中").accessibilityIdentifier("welcome.consent")
@@ -66,6 +67,7 @@ struct WelcomeView: View {
             }.padding(.horizontal, 28).padding(.bottom, 24)
         }.background(Color.paper)
         .sheet(isPresented: $service) { ServiceInfoView() }
+        .sheet(isPresented: $onboarding) { IdentityEditor(isOnboarding: true) }
     }
 }
 

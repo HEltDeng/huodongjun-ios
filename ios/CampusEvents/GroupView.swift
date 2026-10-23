@@ -39,7 +39,14 @@ struct GroupContent: View {
                         if !event.group.available { EmptyState(symbol: "qrcode", title: "主办方还未添加群信息", subtitle: "群二维码发布后会显示在这里。") }
                     }.padding(25)
                     .task(id: event.group.imageData) { detectedLink = detectHTTPS(event.group.imageData) }
-                    .sheet(isPresented: $zoom) { NavigationStack { if let data = event.group.imageData, let image = UIImage(data: data) { ZoomImage(image: image).background(Color.black).ignoresSafeArea(edges: .bottom).toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { zoom = false } } } } }
+                    .sheet(isPresented: $zoom) {
+                        NavigationStack {
+                            if let data = event.group.imageData, let image = UIImage(data: data) {
+                                ZoomImage(image: image).background(Color.black).ignoresSafeArea(edges: .bottom)
+                                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { zoom = false } } }
+                            }
+                        }
+                    }
                 }
             }
         }.background(Color.paper).navigationTitle("活动群").navigationBarTitleDisplayMode(.inline)

@@ -12,7 +12,8 @@ final class AppStore {
     var unread: Int { state.notices.filter { !$0.read }.count }
 
     init(fileURL: URL? = nil) {
-        self.fileURL = fileURL ?? URL.documentsDirectory.appending(path: "campus-events-v1.json")
+        let testID = ProcessInfo.processInfo.environment["UITEST_STORE_ID"].flatMap(UUID.init(uuidString:))
+        self.fileURL = fileURL ?? URL.documentsDirectory.appending(path: testID.map { "test-\($0.uuidString).json" } ?? "campus-events-v1.json")
         do {
             if FileManager.default.fileExists(atPath: self.fileURL.path) {
                 state = try JSONDecoder().decode(AppState.self, from: Data(contentsOf: self.fileURL))
@@ -40,12 +41,19 @@ final class AppStore {
     func enter(consent: Bool) { update { $0.onboarded = true; $0.consented = consent } }
     func favorite(_ id: UUID) { update { if $0.favorites.contains(id) { $0.favorites.remove(id) } else { $0.favorites.insert(id) } } }
     func follow(_ host: String) { update { if $0.followedHosts.contains(host) { $0.followedHosts.remove(host) } else { $0.followedHosts.insert(host) } } }
-    func register(_ event: CampusEvent) -> Bool { update { try EventRules.register(event: event, state: &$0) } }
+    func register(_ event: CampusEvent) -> Bool {
+        update { state in
+            guard let current = state.events.first(where: { $0.id == event.id }) else { throw EventError.invalid("活动已不存在。") }
+            try EventRules.register(event: current, state: &state)
+        }
+    }
     func cancel(_ registration: Registration) { update { try EventRules.cancel(registrationID: registration.id, state: &$0) } }
     func publish(_ event: CampusEvent) -> Bool {
         update { state in
-            try EventRules.validate(event)
-            guard event.hostID == state.profile.id else { throw EventError.invalid("只能编辑自己发布的活动。") }
+            let previous = state.events.first(where: { $0.id == event.id })
+            guard state.consented && state.onboarded && state.profile.complete else { throw EventError.invalid("请先完善校园身份，再发布活动。") }
+            try EventRules.validate(event, allowPastStart: previous?.start == event.start)
+            guard event.schoolID == state.profile.schoolID, event.hostID == state.profile.id, previous == nil || previous?.hostID == state.profile.id else { throw EventError.invalid("只能编辑自己发布的活动。") }
             if let index = state.events.firstIndex(where: { $0.id == event.id }) {
                 let active = state.registrations.filter { $0.eventID == event.id && [.confirmed, .checkedIn].contains($0.status) }.count
                 guard event.capacity >= event.baseAttendees + active else { throw EventError.invalid("人数上限不能小于已报名人数。") }
@@ -55,7 +63,7 @@ final class AppStore {
     }
     func approve(_ registration: Registration, event: CampusEvent) {
         update { state in
-            guard event.hostID == state.profile.id, let i = state.registrations.firstIndex(where: { $0.id == registration.id }), [.pending, .waitlisted].contains(state.registrations[i].status) else { throw EventError.invalid("当前报名不能审核。") }
+            guard event.hostID == state.profile.id, registration.eventID == event.id, !event.cancelled, let i = state.registrations.firstIndex(where: { $0.id == registration.id }), [.pending, .waitlisted].contains(state.registrations[i].status) else { throw EventError.invalid("当前报名不能审核。") }
             let count = event.baseAttendees + state.registrations.filter { $0.eventID == event.id && [.confirmed, .checkedIn].contains($0.status) }.count
             guard count < event.capacity else { throw EventError.invalid("名额已满，请先增加活动人数上限。") }
             state.registrations[i].status = .confirmed
@@ -63,6 +71,14 @@ final class AppStore {
         }
     }
     func checkIn(_ code: String, event: CampusEvent) -> Bool { update { try EventRules.checkIn(code: code, eventID: event.id, state: &$0) } }
+    func postMessage(_ text: String, event: CampusEvent) -> Bool {
+        update { state in
+            let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !body.isEmpty && body.count <= 2000 else { throw EventError.invalid("请输入 1～2000 字的内容。") }
+            guard !event.cancelled && (event.hostID == state.profile.id || state.registrations.contains(where: { $0.eventID == event.id && $0.studentID == state.profile.id && [.confirmed, .checkedIn].contains($0.status) })) else { throw EventError.invalid("请先完成活动报名，再参与讨论。") }
+            state.messages.append(DiscussionMessage(eventID: event.id, author: state.profile.name, body: body))
+        }
+    }
     func cancelEvent(_ event: CampusEvent) {
         update { state in
             guard event.hostID == state.profile.id, let i = state.events.firstIndex(where: { $0.id == event.id }) else { throw EventError.invalid("只能取消自己的活动。") }

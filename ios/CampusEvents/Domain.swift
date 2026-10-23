@@ -23,8 +23,10 @@ struct StudentProfile: Codable, Equatable {
     var studentNumber = "DEMO2026001"
     var college = "计算机与通信工程学院"
     var bio = "一起发现校园里的好活动。"
+    var avatarData: Data? = nil
+    var birthday: Date? = nil
     var schoolID = "csust"
-    var complete: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !studentNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !college.isEmpty }
+    var complete: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !studentNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !college.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 }
 struct EventGroup: Codable, Equatable {
     var name = "活动交流群"
@@ -84,6 +86,13 @@ struct ActivityNotice: Identifiable, Codable, Equatable {
     var date = Date()
     var read = false
 }
+struct DiscussionMessage: Identifiable, Codable, Equatable {
+    var id = UUID()
+    var eventID: UUID
+    var author: String
+    var body: String
+    var date = Date()
+}
 struct AppState: Codable {
     var version = 1
     var profile = StudentProfile()
@@ -94,6 +103,7 @@ struct AppState: Codable {
     var favorites = Set<UUID>()
     var followedHosts = Set<String>()
     var notices = [ActivityNotice]()
+    var messages = [DiscussionMessage]()
 }
 enum EventError: LocalizedError {
     case invalid(String)
@@ -101,12 +111,12 @@ enum EventError: LocalizedError {
 }
 
 enum EventRules {
-    static func validate(_ event: CampusEvent, now: Date = Date()) throws {
+    static func validate(_ event: CampusEvent, now: Date = Date(), allowPastStart: Bool = false) throws {
         guard !event.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw EventError.invalid("请填写活动名称。") }
         guard !event.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw EventError.invalid("请填写活动地点。") }
         guard event.end > event.start else { throw EventError.invalid("结束时间必须晚于开始时间。") }
         guard event.deadline <= event.start else { throw EventError.invalid("报名截止时间不能晚于活动开始时间。") }
-        guard event.start > now else { throw EventError.invalid("请选择未来的活动开始时间。") }
+        guard allowPastStart || event.start > now else { throw EventError.invalid("请选择未来的活动开始时间。") }
         guard (1...10000).contains(event.capacity) else { throw EventError.invalid("人数上限应在 1～10000 人之间。") }
         guard event.capacity >= event.baseAttendees else { throw EventError.invalid("人数上限不能小于已报名人数。") }
         guard event.creditHundredths >= 0 && event.creditHundredths <= 10000 else { throw EventError.invalid("综测分应在 0～100 分之间。") }
@@ -134,6 +144,13 @@ enum EventRules {
         guard let index = state.registrations.firstIndex(where: { $0.id == registrationID && $0.studentID == state.profile.id }) else { throw EventError.invalid("未找到报名记录。") }
         guard state.registrations[index].status != .checkedIn else { throw EventError.invalid("已签到的活动无法取消报名，请联系主办方。") }
         state.registrations[index].status = .cancelled
+        let eventID = state.registrations[index].eventID
+        if let event = state.events.first(where: { $0.id == eventID }), !event.requiresApproval {
+            let occupied = event.baseAttendees + state.registrations.filter { $0.eventID == eventID && [.confirmed, .checkedIn].contains($0.status) }.count
+            if occupied < event.capacity, let next = state.registrations.indices.filter({ state.registrations[$0].eventID == eventID && state.registrations[$0].status == .waitlisted }).min(by: { state.registrations[$0].createdAt < state.registrations[$1].createdAt }) {
+                state.registrations[next].status = .confirmed
+            }
+        }
     }
     static func checkIn(code: String, eventID: UUID, state: inout AppState, now: Date = Date()) throws {
         guard let event = state.events.first(where: { $0.id == eventID }), event.hostID == state.profile.id else { throw EventError.invalid("仅活动发起人可核销本机体验票。") }
