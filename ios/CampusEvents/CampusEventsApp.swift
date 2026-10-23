@@ -21,7 +21,9 @@ struct RootView: View {
     var body: some View {
         @Bindable var store = store
         Group {
-            if store.state.onboarded {
+            if store.state.onboarded && !store.state.settings.setupCompleted {
+                SpaceOnboardingView()
+            } else if store.state.onboarded {
                 TabView(selection: $tab) {
                     Tab("发现", systemImage: "sparkles", value: 0) { DiscoverView() }
                     Tab("活动", systemImage: "calendar", value: 1) { MyEventsView() }
@@ -43,7 +45,7 @@ struct WelcomeView: View {
     @State private var onboarding = false
     var body: some View {
         VStack(spacing: 0) {
-            HStack { Label("长沙理工大学", systemImage: "building.columns").font(.subheadline.weight(.medium)); Spacer(); Text("CSUST").font(.caption.monospaced()).foregroundStyle(.secondary) }.padding(26)
+            HStack { Label("校园 · 长沙", systemImage: "building.columns").font(.subheadline.weight(.medium)); Spacer(); Text("MEET HERE").font(.caption.monospaced()).foregroundStyle(.secondary) }.padding(26)
             Spacer(minLength: 16)
             ZStack {
                 Image("music").resizable().scaledToFill().frame(width: 146, height: 146).clipped().clipShape(RoundedRectangle(cornerRadius: 22)).rotationEffect(.degrees(-14)).offset(x: -92, y: -20)
@@ -78,9 +80,10 @@ extension Color {
 }
 struct PrimaryButton: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(.system(size: 16, weight: .semibold)).foregroundStyle(.white).padding(.vertical, 17).padding(.horizontal, 22)
-            .background(enabled ? Color.ink : Color.gray.opacity(0.35), in: RoundedRectangle(cornerRadius: 17)).opacity(configuration.isPressed ? 0.75 : 1)
+            .background(enabled ? Color.ink : Color.gray.opacity(0.35), in: RoundedRectangle(cornerRadius: 17)).opacity(configuration.isPressed ? 0.85 : 1).scaleEffect(configuration.isPressed && !reduceMotion ? 0.975 : 1).animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.78), value: configuration.isPressed)
     }
 }
 struct EventCover: View {
@@ -126,7 +129,7 @@ struct EventRow: View {
                 Text(event.start.formatted(.dateTime.month(.twoDigits).day(.twoDigits).weekday(.abbreviated).hour().minute())).font(.caption.weight(.medium)).foregroundStyle(Color.accentGreen)
                 Text(event.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(.primary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 Label(event.location, systemImage: "mappin").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                HStack(spacing: 5) { Text(event.host).font(.caption2).foregroundStyle(.secondary).lineLimit(1); Spacer(minLength: 0); if event.creditHundredths > 0 { Tag(text: "+\(event.creditText) 综测") } }
+                HStack(spacing: 5) { Text(event.host).font(.caption2).foregroundStyle(.secondary).lineLimit(1); Spacer(minLength: 0); if event.space == .campus && event.creditHundredths > 0 { Tag(text: "+\(event.creditText) 综测") } }
             }.frame(maxWidth: .infinity, alignment: .leading)
         }.padding(.vertical, 7).contentShape(Rectangle())
     }

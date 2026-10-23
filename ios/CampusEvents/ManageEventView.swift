@@ -10,7 +10,7 @@ struct HostDashboard: View {
     @State private var create = false
     var body: some View {
         List {
-            let items = store.state.events.filter { $0.hostID == store.profile.id }.sorted { $0.start > $1.start }
+            let items = store.scopedEvents.filter { $0.hostID == store.profile.id }.sorted { $0.start > $1.start }
             if items.isEmpty { EmptyState(symbol: "calendar.badge.plus", title: "发起你的第一场活动", subtitle: "从一次分享会、一场比赛或一次小聚开始。") }
             ForEach(items) { event in Button { selected = event } label: { EventRow(event: event) }.buttonStyle(.plain) }
         }.navigationTitle("主办方工作台").toolbar { Button { create = true } label: { Image(systemName: "plus") }.accessibilityLabel("创建活动") }.sheet(isPresented: $create) { EventEditorView() }.sheet(item: $selected) { ManageEventView(eventID: $0.id) }
@@ -136,7 +136,7 @@ struct LocalAdminView: View {
         Form {
             Section { Text("此页用于预览教师计分流程，只修改本机示例记录。正式教师权限与学校综测后台尚未接入。").font(.footnote).foregroundStyle(.secondary) }
             Section("活动计分规则") {
-                Picker("活动", selection: $selectedID) { Text("选择活动").tag(UUID?.none); ForEach(store.events) { Text($0.title).tag(Optional($0.id)) } }
+                Picker("活动", selection: $selectedID) { Text("选择活动").tag(UUID?.none); ForEach(store.events.filter { $0.space == .campus }) { Text($0.title).tag(Optional($0.id)) } }
                 TextField("综测分", text: $points).keyboardType(.decimalPad)
                 Picker("计入方式", selection: $mode) { ForEach(CreditMode.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
                 Button("保存规则") {
@@ -147,7 +147,7 @@ struct LocalAdminView: View {
                 }.disabled(selectedID == nil)
             }
             Section("待审核记录") {
-                let pending = store.state.registrations.filter { $0.status == .checkedIn && $0.creditHundredths > 0 && !$0.creditApproved }
+                let pending = store.state.registrations.filter { $0.status == .checkedIn && $0.creditHundredths > 0 && !$0.creditApproved && store.event($0.eventID)?.space == .campus }
                 if pending.isEmpty { Text("暂无待审核记录").foregroundStyle(.secondary) }
                 ForEach(pending) { reg in
                     HStack { VStack(alignment: .leading, spacing: 5) { Text(store.event(reg.eventID)?.title ?? "活动").font(.subheadline); Text(String(format: "%.2f 分", Double(reg.creditHundredths) / 100)).font(.caption).foregroundStyle(.secondary) }; Spacer(); Button("通过") { store.update { state in if let i = state.registrations.firstIndex(where: { $0.id == reg.id }) { state.registrations[i].creditApproved = true } } } }

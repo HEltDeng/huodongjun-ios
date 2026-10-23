@@ -19,7 +19,7 @@ struct GroupContent: View {
         ScrollView {
             if let event = store.event(eventID) {
                 let admitted = [.confirmed, .checkedIn].contains(store.registration(eventID)?.status ?? .cancelled)
-                let allowed = !event.group.membersOnly || admitted || event.hostID == store.profile.id
+                let allowed = !event.cancelled && (!event.group.membersOnly || (admitted && store.eligible(event)) || event.hostID == store.profile.id)
                 if !allowed {
                     EmptyState(symbol: "lock", title: "报名成功后解锁活动群", subtitle: "通过报名后，即可在这里查看二维码和入群方式。")
                 } else {

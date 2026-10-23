@@ -63,8 +63,10 @@ struct CampusEvent: Identifiable, Codable, Equatable {
     var published = true
     var cancelled = false
     var agenda = [String]()
+    var access: EventAccess? = nil
+    var interestTags: Set<Interest>? = nil
     var creditText: String { String(format: "%.2f", Double(creditHundredths) / 100).replacingOccurrences(of: ".00", with: "") }
-    var shareText: String { "邀请你参加「\(title)」\n长沙理工大学 · \(campus.rawValue)\n\(start.formatted(date: .abbreviated, time: .shortened))\n\(location)" }
+    var shareText: String { "邀请你参加「\(title)」\n\(locationContext)\n\(start.formatted(date: .abbreviated, time: .shortened))\n\(location)" }
 }
 struct Registration: Identifiable, Codable, Equatable {
     var id = UUID()
@@ -77,6 +79,7 @@ struct Registration: Identifiable, Codable, Equatable {
     var ticketCode = UUID().uuidString
     var creditHundredths = 0
     var creditApproved = false
+    var schoolID: String? = nil
 }
 struct ActivityNotice: Identifiable, Codable, Equatable {
     var id = UUID()
@@ -85,6 +88,7 @@ struct ActivityNotice: Identifiable, Codable, Equatable {
     var eventID: UUID? = nil
     var date = Date()
     var read = false
+    var recommendation: Bool? = nil
 }
 struct DiscussionMessage: Identifiable, Codable, Equatable {
     var id = UUID()
@@ -94,7 +98,8 @@ struct DiscussionMessage: Identifiable, Codable, Equatable {
     var date = Date()
 }
 struct AppState: Codable {
-    var version = 1
+    var version = 2
+    var spaceSettings: SpaceSettings? = nil
     var profile = StudentProfile()
     var onboarded = false
     var consented = false
@@ -120,6 +125,8 @@ enum EventRules {
         guard (1...10000).contains(event.capacity) else { throw EventError.invalid("人数上限应在 1～10000 人之间。") }
         guard event.capacity >= event.baseAttendees else { throw EventError.invalid("人数上限不能小于已报名人数。") }
         guard event.creditHundredths >= 0 && event.creditHundredths <= 10000 else { throw EventError.invalid("综测分应在 0～100 分之间。") }
+        guard School.all.map(\.id).contains(event.schoolID), event.audienceSchoolIDs.isSubset(of: Set(School.all.map(\.id))) else { throw EventError.invalid("请选择支持的学校。") }
+        guard event.space != .city || event.creditHundredths == 0 else { throw EventError.invalid("跨校活动不能直接配置本校综测分。") }
         if !event.group.link.isEmpty && safeGroupURL(event.group.link) == nil { throw EventError.invalid("群链接仅支持完整的 HTTPS 链接。") }
     }
     static func safeGroupURL(_ text: String) -> URL? {
@@ -128,7 +135,7 @@ enum EventRules {
     }
     static func register(event: CampusEvent, state: inout AppState, now: Date = Date()) throws {
         guard state.consented && state.onboarded && state.profile.complete else { throw EventError.invalid("请先完善校园身份，再报名活动。") }
-        guard event.schoolID == state.profile.schoolID && event.published && !event.cancelled else { throw EventError.invalid("该活动当前不可报名。") }
+        guard SpaceRules.canRegister(event, state: state) && event.published && !event.cancelled else { throw EventError.invalid("该活动当前不可报名。") }
         guard now < event.deadline else { throw EventError.invalid("报名已截止。") }
         if state.registrations.contains(where: { $0.eventID == event.id && $0.studentID == state.profile.id && $0.status.active }) { return }
         let occupied = event.baseAttendees + state.registrations.filter { $0.eventID == event.id && [.confirmed, .checkedIn].contains($0.status) }.count
@@ -137,7 +144,9 @@ enum EventRules {
             guard event.allowWaitlist else { throw EventError.invalid("活动名额已满。") }
             status = .waitlisted
         } else { status = event.requiresApproval ? .pending : .confirmed }
-        state.registrations.append(Registration(eventID: event.id, studentID: state.profile.id, status: status))
+        var registration = Registration(eventID: event.id, studentID: state.profile.id, status: status)
+        registration.schoolID = SpaceRules.membership(for: event, state: state)?.schoolID
+        state.registrations.append(registration)
         state.notices.insert(ActivityNotice(title: status.rawValue, body: "「\(event.title)」\(status == .confirmed ? "已加入你的活动。" : "的报名状态已更新。")", eventID: event.id), at: 0)
     }
     static func cancel(registrationID: UUID, state: inout AppState) throws {
@@ -153,7 +162,7 @@ enum EventRules {
         }
     }
     static func checkIn(code: String, eventID: UUID, state: inout AppState, now: Date = Date()) throws {
-        guard let event = state.events.first(where: { $0.id == eventID }), event.hostID == state.profile.id else { throw EventError.invalid("仅活动发起人可核销本机体验票。") }
+        guard let event = state.events.first(where: { $0.id == eventID }), event.hostID == state.profile.id, SpaceRules.inCurrentSpace(event, state: state), SpaceRules.verifiedSchools(state).contains(event.schoolID) else { throw EventError.invalid("仅活动发起人可核销本机体验票。") }
         guard event.published && !event.cancelled else { throw EventError.invalid("活动当前不可签到。") }
         guard now >= event.start.addingTimeInterval(-30 * 60) && now <= event.end else { throw EventError.invalid("签到在活动开始前 30 分钟至结束期间开放。") }
         guard let index = state.registrations.firstIndex(where: { $0.eventID == eventID && "huodongjun:local-ticket:\($0.ticketCode)" == code.trimmingCharacters(in: .whitespacesAndNewlines) }) else { throw EventError.invalid("不是这场活动的有效体验票。") }
@@ -161,8 +170,8 @@ enum EventRules {
         guard state.registrations[index].status == .confirmed else { throw EventError.invalid("只有报名成功的凭证可以签到。") }
         state.registrations[index].status = .checkedIn
         state.registrations[index].checkedInAt = now
-        state.registrations[index].creditHundredths = event.creditHundredths
-        state.registrations[index].creditApproved = event.creditMode == .automatic
+        state.registrations[index].creditHundredths = event.space == .campus ? event.creditHundredths : 0
+        state.registrations[index].creditApproved = event.space == .campus && event.creditMode == .automatic
     }
 }
 

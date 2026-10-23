@@ -10,6 +10,8 @@ final class EventRulesTests: XCTestCase {
     func state() -> AppState {
         var state = AppState()
         state.onboarded = true; state.consented = true
+        state.settings.memberships = [SchoolMembership(schoolID: "csust", studentNumber: "DEMO2026001", college: "测试学院", status: .demoVerified)]
+        state.settings.setupCompleted = true
         return state
     }
     func event(owner: UUID? = nil) -> CampusEvent {
@@ -107,6 +109,7 @@ final class EventRulesTests: XCTestCase {
         let url = dir.appending(path: "state.json")
         let first = AppStore(fileURL: url)
         first.enter(consent: true)
+        XCTAssertTrue(first.verifyDemo(schoolID: "csust", number: "DEMO2026001", college: "测试学院", status: .demoVerified))
         let event = try XCTUnwrap(first.events.first)
         XCTAssertTrue(first.register(event))
         first.favorite(event.id)
@@ -122,6 +125,7 @@ final class EventRulesTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         let store = AppStore(fileURL: url)
         store.enter(consent: true)
+        XCTAssertTrue(store.verifyDemo(schoolID: "csust", number: "DEMO2026001", college: "测试学院", status: .demoVerified))
         var draft = event(owner: store.profile.id)
         draft.start = Date().addingTimeInterval(7200)
         draft.end = draft.start.addingTimeInterval(3600)
@@ -142,6 +146,7 @@ final class EventRulesTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         let store = AppStore(fileURL: url)
         store.enter(consent: true)
+        XCTAssertTrue(store.verifyDemo(schoolID: "csust", number: "DEMO2026001", college: "测试学院", status: .demoVerified))
         var seed = try XCTUnwrap(store.events.first)
         seed.hostID = store.profile.id
         XCTAssertFalse(store.publish(seed))
@@ -153,6 +158,7 @@ final class EventRulesTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         let store = AppStore(fileURL: url)
         store.enter(consent: true)
+        XCTAssertTrue(store.verifyDemo(schoolID: "csust", number: "DEMO2026001", college: "测试学院", status: .demoVerified))
         let stale = try XCTUnwrap(store.events.first)
         XCTAssertTrue(store.update { state in
             let index = state.events.firstIndex(where: { $0.id == stale.id })!
