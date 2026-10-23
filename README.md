@@ -13,6 +13,16 @@
 - 用户选择：**先只准备模拟器，原版中的交互由用户操作**。不得自动使用 ADB 点击、填写、登录或操作 Luma。
 - 开发目标仍是 iOS。安卓仅作为原版交互参考，系统权限、分享、照片选择、支付等平台差异必须另外记录。
 
+## 已准备的参考模拟器
+
+- AVD：`Luma_Reference_Play_API_36_1`
+- 系统：Android 16 / API 36.1 / ARM64，Google 官方 Google Play 镜像 revision 4。
+- ADB 设备：`emulator-5556`。仅用于安装环境与启动状态检查，未执行应用页面点击。
+- 已验证：`sys.boot_completed=1`，Google Play 商店包 `com.android.vending` 存在。
+- 原有 `Pixel_8_API_36_1` 未修改或删除。
+- 再次启动：双击 `scripts/start-luma-reference.command`。
+- 用户接下来在 Google Play 登录并搜索 **Luma: Events & Invites**，开发者 **Luma Labs, Inc.**。截至此记录，Luma 尚未安装和实际检查。
+
 ## 已有草稿
 
 | 文件 | 内容 | 状态 |

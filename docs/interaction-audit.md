@@ -1,6 +1,6 @@
 # Luma 原版交互记录
 
-当前状态：原版应用尚未安装，以下均为待检查清单，不是已观察到的界面事实。
+当前状态：带 Google Play 的独立安卓参考模拟器已经创建并启动；原版应用尚未安装，以下均为待检查清单，不是已观察到的界面事实。
 
 参考应用：Luma: Events & Invites；开发者 Luma Labs, Inc.；Android 包名 `com.luma.mobile`；iOS App Store ID `1546150895`。
 
@@ -41,7 +41,8 @@
 
 - Xcode iOS 模拟器不能直接安装 App Store 分发的 iPhone 应用。我们自己的 iOS 应用可在建立工程后编译为模拟器版本。
 - 当前 Xcode 未发现连接的 iPhone 真机。
-- 现有 Android AVD `Pixel_8_API_36_1` 使用 Google APIs 镜像，`PlayStore.enabled=no`。需要另建 Google Play AVD；保留原设备。
+- 原有 Android AVD `Pixel_8_API_36_1` 使用 Google APIs 镜像，`PlayStore.enabled=no`，已保留原设备。
+- 新建 `Luma_Reference_Play_API_36_1` 使用官方 Google Play API 36.1 ARM64 revision 4 镜像，`PlayStore.enabled=yes`。已确认 Android 16 启动完成且商店包存在；应用交互由用户操作。
 
 官方参考：
 
