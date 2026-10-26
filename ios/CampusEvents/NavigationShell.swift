@@ -37,15 +37,21 @@ struct NavigationShell: View {
         }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
             VStack(spacing: 0) {
                 Color.clear.frame(height: 0).snackBar()
-                HStack(spacing: 3) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 5), spacing: 0) {
                     navButton(0); navButton(1)
                     Button { create = true } label: {
-                        Image(systemName: "plus").font(.system(size: 23, weight: .medium)).foregroundStyle(.white).frame(width: 52, height: 52).background(Color.ink, in: RoundedRectangle(cornerRadius: 19))
-                    }.buttonStyle(SoftPressStyle()).frame(maxWidth: .infinity).accessibilityLabel("发布活动").accessibilityIdentifier("nav.create").anchorPreference(key: NavAnchors.self, value: .bounds) { [4: $0] }
+                        VStack(spacing: 4) {
+                            Image(systemName: "plus").font(.system(size: 23, weight: .medium)).foregroundStyle(.white)
+                                .frame(width: 44, height: 44).background(Color.ink, in: RoundedRectangle(cornerRadius: 15))
+                            Text("发布").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.ink)
+                        }.frame(maxWidth: .infinity).frame(height: 68).contentShape(Rectangle())
+                    }.buttonStyle(SoftPressStyle()).accessibilityLabel("发布活动").accessibilityIdentifier("nav.create").anchorPreference(key: NavAnchors.self, value: .bounds) { [4: $0] }
                     navButton(2); navButton(3)
-                }.animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.85), value: tab).padding(8).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 27))
-                    .overlay(RoundedRectangle(cornerRadius: 27).stroke(.white.opacity(0.8), lineWidth: 1))
-                    .shadow(color: Color.ink.opacity(0.08), radius: 20, y: 5).padding(.horizontal, 17).padding(.bottom, 6)
+                }.animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.85), value: tab)
+                    .padding(5).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26))
+                    .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.85), lineWidth: 1))
+                    .shadow(color: Color.ink.opacity(0.06), radius: 12, y: 4).padding(.horizontal, 16).padding(.top, 5).padding(.bottom, 6)
+
             }
         }.background(Color.paper).sheet(isPresented: $create) { EventEditorView().appSheet(.large, stops: [SheetSize.tall, .large]) }
             .overlayPreferenceValue(NavAnchors.self) { anchors in
@@ -53,6 +59,7 @@ struct NavigationShell: View {
                     if let anchor = anchors[guideStep == 0 ? 0 : guideStep == 1 ? 4 : 2] { tour(focus: geometry[anchor].insetBy(dx: -3, dy: -3), clearance: geometry.size.height - geometry[anchor].minY + 18) }
                 }.ignoresSafeArea() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .openMyActivities)) { _ in select(1) }
             .onReceive(NotificationCenter.default.publisher(for: .showInteractionTour)) { _ in guideStep = 0; guide = true }
             .onAppear { if store.state.settings.interactionTourSeen != true { guideStep = 0; guide = true } }
             .onChange(of: store.contextID) { _, _ in store.snack = nil }
@@ -64,11 +71,11 @@ struct NavigationShell: View {
     func navButton(_ index: Int) -> some View {
         Button { select(index) } label: {
             VStack(spacing: 4) {
-                Image(systemName: icons[index]).font(.system(size: 20, weight: .medium)).symbolEffect(.bounce, value: reduceMotion ? false : tab == index)
-                    .overlay(alignment: .topTrailing) { if index == 2 && store.unread > 0 { Circle().fill(Color.orange).frame(width: 7, height: 7).offset(x: 5, y: -2) } }
-                Text(titles[index]).font(.system(size: 10, weight: tab == index ? .semibold : .medium))
-            }.frame(maxWidth: .infinity).frame(height: 52).foregroundStyle(tab == index ? Color.accentGreen : Color.secondary)
-                .background { if tab == index { RoundedRectangle(cornerRadius: 18).fill(Color.accentGreen.opacity(0.09)).matchedGeometryEffect(id: "nav", in: navSelection) } }
+                Image(systemName: icons[index]).font(.system(size: 24, weight: .regular)).frame(width: 44, height: 44).symbolEffect(.bounce, value: reduceMotion ? false : tab == index)
+                    .overlay(alignment: .topTrailing) { if index == 2 && store.unread > 0 { Circle().fill(Color.orange).frame(width: 7, height: 7).offset(x: -3, y: 5) } }
+                Text(titles[index]).font(.system(size: 12, weight: tab == index ? .semibold : .medium))
+            }.frame(maxWidth: .infinity).frame(height: 68).contentShape(Rectangle()).foregroundStyle(tab == index ? Color.accentGreen : Color.secondary)
+                .background { if tab == index { RoundedRectangle(cornerRadius: 21).fill(Color.accentGreen.opacity(0.085)).matchedGeometryEffect(id: "nav", in: navSelection) } }
         }.buttonStyle(SoftPressStyle()).accessibilityAddTraits(tab == index ? .isSelected : [])
             .anchorPreference(key: NavAnchors.self, value: .bounds) { [index: $0] }
             .accessibilityIdentifier("nav.\(index)").accessibilityLabel(titles[index] + (index == 2 && store.unread > 0 ? "，\(store.unread)条未读" : ""))
@@ -100,7 +107,7 @@ private struct SpotlightCutout: Shape {
     let rect: CGRect
     func path(in bounds: CGRect) -> Path { var path = Path(bounds); path.addRoundedRect(in: rect, cornerSize: CGSize(width: 20, height: 20)); return path }
 }
-extension Notification.Name { static let showInteractionTour = Notification.Name("showInteractionTour") }
+extension Notification.Name { static let showInteractionTour = Notification.Name("showInteractionTour"); static let openMyActivities = Notification.Name("openMyActivities") }
 
 private struct NavAnchors: PreferenceKey {
     static var defaultValue: [Int: Anchor<CGRect>] = [:]

@@ -4,51 +4,164 @@ import UserNotifications
 
 struct ProfileView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var identity = false
     @State private var schools = false
     @State private var interests = false
+    @State private var settings = false
     @State private var path = NavigationPath()
+    private var joined: Int { store.scopedEvents.filter { store.registration($0.id) != nil }.count }
+    private var saved: Int { store.events.filter { store.state.favorites.contains($0.id) }.count }
+    private var hosted: Int { store.scopedEvents.filter { $0.hostID == store.profile.id }.count }
+    private var credits: [Registration] { store.state.registrations.filter { $0.studentID == store.profile.id && $0.status == .checkedIn && store.event($0.eventID) != nil } }
+    private var points: String { String(format: "%.2f", Double(credits.filter(\.creditApproved).reduce(0) { $0 + $1.creditHundredths }) / 100) }
+    private var member: SchoolMembership? { store.state.settings.memberships.first { $0.schoolID == store.school.id } }
+    var body: some View {
+        NavigationStack(path: $path) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    HStack {
+                        Text("我的").font(.system(size: 30, weight: .bold)).foregroundStyle(Color.ink)
+                        Spacer()
+                        Button { settings = true } label: {
+                            Image(systemName: "gearshape").font(.system(size: 21, weight: .medium)).frame(width: 46, height: 46).background(.white, in: Circle())
+                        }.buttonStyle(SoftPressStyle()).accessibilityLabel("设置").accessibilityIdentifier("profile.settings")
+                    }
+                    SpaceSwitcher()
+                    identityCard
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("我的常用").font(.headline)
+                            Spacer()
+                            Text(store.space == .campus ? "校园生活" : "长沙生活").font(.caption).foregroundStyle(.secondary)
+                        }
+                        quickActions
+                    }
+                    VStack(spacing: 0) {
+                        NavigationLink { FollowedHostsView().toolbar(.visible, for: .navigationBar) } label: {
+                            ProfileMenuRow(title: "关注的组织", symbol: "person.2", value: "\(store.state.followedHosts.count)")
+                        }.buttonStyle(SoftPressStyle()).accessibilityIdentifier("profile.following")
+                        Divider().padding(.leading, 58).padding(.trailing, 18)
+                        NavigationLink { RecommendationSettingsView().toolbar(.visible, for: .navigationBar) } label: {
+                            ProfileMenuRow(title: "推荐提醒", symbol: "bell.badge", value: "偏好设置")
+                        }.buttonStyle(SoftPressStyle()).accessibilityIdentifier("profile.recommendations")
+                    }.background(.white, in: RoundedRectangle(cornerRadius: 23))
+                }.padding(.horizontal, 22).padding(.top, 12).padding(.bottom, 24)
+            }.background(Color.paper).toolbar(.hidden, for: .navigationBar)
+                .sheet(isPresented: $schools) { SchoolPickerView().appSheet(SheetSize.half) }
+                .sheet(isPresented: $interests) { InterestSelectionView().appSheet() }
+                .sheet(isPresented: $identity) { IdentityEditor().appSheet() }
+                .sheet(isPresented: $settings) { ProfileSettingsView().appSheet() }
+                .onChange(of: store.contextID) { _, _ in path = NavigationPath() }
+        }
+    }
+    private var identityCard: some View {
+        VStack(spacing: 17) {
+            Button { identity = true } label: {
+                HStack(spacing: 14) {
+                    ProfileAvatar(profile: store.profile, size: 62)
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(store.profile.name).font(.title2.bold()).foregroundStyle(Color.ink).lineLimit(2)
+                        if !store.profile.bio.isEmpty { Text(store.profile.bio).font(.subheadline).foregroundStyle(.secondary).lineLimit(2).multilineTextAlignment(.leading) }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(spacing: 4) {
+                        Image(systemName: "square.and.pencil").font(.system(size: 19, weight: .medium))
+                        Text("编辑").font(.caption.weight(.medium))
+                    }.foregroundStyle(Color.accentGreen).frame(width: 46, height: 50).background(Color.accentGreen.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+                }.contentShape(Rectangle())
+            }.buttonStyle(SoftPressStyle()).accessibilityLabel("编辑资料，" + store.profile.name).accessibilityIdentifier("profile.edit")
+            Divider().overlay(Color.accentGreen.opacity(0.03))
+            Button { schools = true } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "building.columns").font(.system(size: 18)).foregroundStyle(Color.accentGreen).frame(width: 24)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(store.school.name).font(.subheadline.weight(.medium)).foregroundStyle(Color.ink)
+                        Text(member?.college ?? "完善学校身份").font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    Text(member?.status.rawValue ?? "去验证").font(.system(size: 10, weight: .medium)).foregroundStyle(Color.accentGreen).padding(.horizontal, 8).padding(.vertical, 6).background(Color.accentGreen.opacity(0.07), in: Capsule())
+                    Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(.tertiary)
+                }.frame(minHeight: 44).contentShape(Rectangle())
+            }.buttonStyle(SoftPressStyle()).accessibilityIdentifier("profile.schoolCard")
+        }.padding(18).background(.white, in: RoundedRectangle(cornerRadius: 26))
+            .overlay(RoundedRectangle(cornerRadius: 26).stroke(Color.accentGreen.opacity(0.055), lineWidth: 1))
+    }
+    private var quickActions: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: typeSize.isAccessibilitySize ? 2 : 3), spacing: 10) {
+            Button { NotificationCenter.default.post(name: .openMyActivities, object: nil) } label: {
+                ProfileShortcut(title: "我的活动", symbol: "calendar", detail: "\(joined) 场报名", emphasized: true)
+            }.buttonStyle(SoftPressStyle()).accessibilityIdentifier("profile.activities")
+            NavigationLink { SavedEventsView().toolbar(.visible, for: .navigationBar) } label: {
+                ProfileShortcut(title: "我的收藏", symbol: "bookmark", detail: "\(saved) 场活动")
+            }.buttonStyle(SoftPressStyle()).accessibilityIdentifier("profile.saved")
+            NavigationLink { CreditsView().toolbar(.visible, for: .navigationBar) } label: {
+                ProfileShortcut(title: store.space == .campus ? "综测记录" : "参与记录", symbol: "seal", detail: store.space == .campus ? points + " 分已计入" : "\(credits.count) 次签到")
+            }.buttonStyle(SoftPressStyle()).accessibilityIdentifier("profile.credits")
+            Button { interests = true } label: {
+                ProfileShortcut(title: "兴趣偏好", symbol: "sparkles", detail: "已选 \(store.state.settings.interests.count) 个方向")
+            }.buttonStyle(SoftPressStyle()).accessibilityIdentifier("profile.interests")
+            Button { schools = true } label: {
+                ProfileShortcut(title: "学校身份", symbol: "person.text.rectangle", detail: member?.status.rawValue ?? "待验证")
+            }.buttonStyle(SoftPressStyle()).accessibilityIdentifier("profile.schools")
+            NavigationLink { HostDashboard().toolbar(.visible, for: .navigationBar) } label: {
+                ProfileShortcut(title: "主办工作台", symbol: "rectangle.stack", detail: "\(hosted) 场活动")
+            }.buttonStyle(SoftPressStyle()).accessibilityIdentifier("profile.host")
+        }
+    }
+}
+private struct ProfileShortcut: View {
+    let title: String
+    let symbol: String
+    let detail: String
+    var emphasized = false
+    var body: some View {
+        VStack(spacing: 7) {
+            Image(systemName: symbol).font(.system(size: 24, weight: .regular)).foregroundStyle(Color.accentGreen)
+                .frame(width: 43, height: 40).background(Color.accentGreen.opacity(emphasized ? 0.11 : 0.055), in: RoundedRectangle(cornerRadius: 13))
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(Color.ink).lineLimit(1)
+            Text(detail).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+        }.padding(.horizontal, 5).padding(.vertical, 13).frame(maxWidth: .infinity, minHeight: 116)
+            .background(emphasized ? Color.accentGreen.opacity(0.065) : .white, in: RoundedRectangle(cornerRadius: 21))
+            .contentShape(RoundedRectangle(cornerRadius: 21)).accessibilityElement(children: .combine)
+    }
+}
+private struct ProfileMenuRow: View {
+    let title: String
+    let symbol: String
+    var value: String = ""
+    var body: some View {
+        HStack(spacing: 13) {
+            Image(systemName: symbol).font(.system(size: 20, weight: .regular)).foregroundStyle(Color.accentGreen).frame(width: 27)
+            Text(title).font(.subheadline.weight(.medium)).foregroundStyle(Color.ink)
+            Spacer()
+            Text(value).font(.caption).foregroundStyle(.secondary)
+            Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(.tertiary)
+        }.padding(.horizontal, 18).frame(minHeight: 58).contentShape(Rectangle())
+    }
+}
+struct ProfileSettingsView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
     @State private var service = false
     @State private var exit = false
     @State private var notice: String?
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             List {
-                Section { SpaceSwitcher().listRowInsets(EdgeInsets()).listRowBackground(Color.clear) }
-                Section {
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack(alignment: .top) { ProfileAvatar(profile: store.profile, size: 72); Spacer(); Button("编辑资料") { identity = true }.font(.caption.weight(.medium)).buttonStyle(.bordered).clipShape(Capsule()) }
-                        Text(store.profile.name).font(.title.bold())
-                        Text(store.profile.bio).font(.subheadline).foregroundStyle(.secondary)
-                        HStack { Label(store.school.name, systemImage: "building.columns"); Spacer(); Text(store.profile.college).lineLimit(1) }.font(.caption).foregroundStyle(.secondary)
-                    }.padding(.vertical, 9).listRowBackground(Color.clear).listRowInsets(EdgeInsets())
-                }
-                Section {
-                    NavigationLink { CreditsView() } label: { Label(store.space == .campus ? "本校综测" : "校外参与记录", systemImage: "seal") }
-                    NavigationLink { SavedEventsView() } label: { Label("收藏的活动", systemImage: "bookmark") }
-                    NavigationLink { FollowedHostsView() } label: { Label("关注的组织", systemImage: "person.2") }
-                    NavigationLink { HostDashboard() } label: { Label("主办方工作台", systemImage: "rectangle.stack") }
-                }
-                Section("账号与偏好") {
-                    Button { schools = true } label: { Label("学校与身份", systemImage: "person.text.rectangle") }
-                    Button { interests = true } label: { Label("兴趣偏好", systemImage: "sparkles") }
-                    NavigationLink { RecommendationSettingsView() } label: { Label("推荐提醒", systemImage: "bell.badge") }
+                Section("通知与帮助") {
                     Button { Task {
                         do {
                             let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
                             notice = granted ? "已允许通知。远程活动提醒将在服务端接入后启用。" : "通知权限未开启，可前往系统设置修改。"
                         } catch { notice = "暂时无法请求通知权限。" }
                     } } label: { Label("通知设置", systemImage: "bell") }
-                    Button { NotificationCenter.default.post(name: .showInteractionTour, object: nil) } label: { Label("操作引导", systemImage: "hand.point.up.left") }
-                    Button { service = true } label: { Label("服务说明与隐私", systemImage: "hand.raised") }
                     if let notice { Text(notice).font(.footnote).foregroundStyle(.secondary) }
-                    NavigationLink { LocalAdminView() } label: { Label("本机管理预览", systemImage: "slider.horizontal.3") }
+                    Button { dismiss(); NotificationCenter.default.post(name: .showInteractionTour, object: nil) } label: { Label("操作引导", systemImage: "hand.point.up.left") }
+                    Button { service = true } label: { Label("服务说明与隐私", systemImage: "hand.raised") }
                 }
+                Section { NavigationLink { LocalAdminView() } label: { Label("本机管理预览", systemImage: "slider.horizontal.3") } }
                 Section { Button("返回欢迎页") { exit = true }.frame(maxWidth: .infinity).foregroundStyle(.secondary) }
-            }.scrollContentBackground(.hidden).background(Color.paper).navigationTitle("我的").navigationBarTitleDisplayMode(.inline)
-                .sheet(isPresented: $schools) { SchoolPickerView().appSheet(SheetSize.half) }.sheet(isPresented: $interests) { InterestSelectionView().appSheet() }
-                .onChange(of: store.contextID) { _, _ in path = NavigationPath() }
-                .sheet(isPresented: $identity) { IdentityEditor().appSheet() }.sheet(isPresented: $service) { ServiceInfoView().appSheet() }
+            }.scrollContentBackground(.hidden).background(Color.paper).navigationTitle("设置").navigationBarTitleDisplayMode(.inline).bottomDismiss()
+                .sheet(isPresented: $service) { ServiceInfoView().appSheet() }
                 .bottomActions("返回欢迎页？本机活动和报名记录会保留。", isPresented: $exit, actions: [SheetAction("返回欢迎页") { store.update { $0.onboarded = false; $0.settings.setupCompleted = false } }])
         }
     }
@@ -140,7 +253,7 @@ struct ServiceInfoView: View {
                 Section("数据与权限") { Text("资料、选填生日、报名记录和主动选择的图片保存在应用沙盒内。照片选择使用系统选择器；保存二维码时才请求添加照片权限；扫码或拍照时才请求相机权限。用户主动打开群链接或外部应用后，目标服务按其自身规则处理数据。") }
                 Section("使用约定") { Text("发布活动请确保内容和图片可以使用；不要冒充校方或主办方。不要发布他人的学号、联系方式和未经许可的群二维码。取消活动需明确确认，已签到的记录应通过审核流程处理。") }
                 Section("对标状态") { Text("当前依据 Luma 的公开界面与功能资料实现活动流程，未逐页核实原生应用的全部交互。生日是本版本的选填资料字段，不代表已确认 Luma 存在相同页面。") }
-                Section { LabeledContent("版本", value: "0.3.0 · 交互精修本机体验") }
+                Section { LabeledContent("版本", value: "0.3.1 · 个人中心精修") }
             }.font(.subheadline).navigationTitle("服务说明与隐私").navigationBarTitleDisplayMode(.inline).bottomDismiss()
         }
     }

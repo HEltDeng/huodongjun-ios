@@ -1,4 +1,4 @@
-> 2026-10-26 更新：0.3.0 已完成交互体系精修，37 项 XCTest 通过。最新组件清单、模拟器实测与限制见 [interaction-system.md](interaction-system.md)。以下保留此前版本的验收记录。
+> 2026-10-26 更新：0.3.1 已完成个人中心及底部 Dock 精修，37 项 XCTest 再次通过。此次布局与入口验收见 [profile-redesign.md](profile-redesign.md)；交互组件清单与限制见 [interaction-system.md](interaction-system.md)。以下保留此前版本的验收记录。
 
 # iOS 体验检查记录
 
