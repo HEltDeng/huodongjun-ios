@@ -5,7 +5,7 @@
 ## 当前交付（2026-10-26）
 
 - 原生 SwiftUI 应用，最低 iOS 18；已在 Xcode 26.6、iPhone 17 Pro / iOS 26.5 模拟器编译安装。
-- 本地 Git 分支 `codex/ios-campus-events`；尚未创建远程仓库。
+- 本地 Git 分支 `codex/ios-campus-events`；对应私有仓库 [HEltDeng/huodongjun-ios](https://github.com/HEltDeng/huodongjun-ios)，远端主分支为 `main`。
 - 当前为 **0.3.1 个人中心精修本机体验版**：操作有实际状态变化，数据以 JSON 原子写入应用沙盒，重启后保留。
 - 根据用户最新决定，停止安卓参考路线；已删除此次新增的 `Luma_Reference_Play_API_36_1` AVD、专用 Google Play 系统镜像和启动脚本，保留原有 `Pixel_8_API_36_1`。
 - 原版 Luma 未完成逐页实机核查。本版本不能被表述为已验证的完整 1:1 复刻；公开截图只作为视觉参考。
