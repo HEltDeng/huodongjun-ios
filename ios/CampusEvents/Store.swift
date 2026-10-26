@@ -5,7 +5,9 @@ import Observation
 final class AppStore {
     private(set) var state: AppState
     var error: String?
-    var toast: String?
+    var snack: SnackNotice?
+    func dismissSnack(_ id: UUID) { if snack?.id == id { snack = nil } }
+    func notify(_ message: String, undo: (() -> Void)? = nil) { snack = SnackNotice(message: message, undo: undo) }
     private let fileURL: URL
     private let schedulesNotifications: Bool
     var profile: StudentProfile { state.profile }
@@ -98,8 +100,23 @@ final class AppStore {
         }
     }
     func enter(consent: Bool) { update { $0.onboarded = true; $0.consented = consent; if !consent { $0.settings.activeSpace = .city; $0.settings.setupCompleted = true } } }
-    func favorite(_ id: UUID) { guard event(id) != nil else { return }; update { if $0.favorites.contains(id) { $0.favorites.remove(id) } else { $0.favorites.insert(id) } } }
-    func follow(_ host: String) { update { if $0.followedHosts.contains(host) { $0.followedHosts.remove(host) } else { $0.followedHosts.insert(host) } } }
+    func favorite(_ id: UUID) {
+        guard event(id) != nil else { return }
+        let wasSaved = state.favorites.contains(id)
+        guard update({ if wasSaved { $0.favorites.remove(id) } else { $0.favorites.insert(id) } }) else { return }
+        notify(wasSaved ? "已取消收藏" : "已收藏活动") { [weak self] in
+            guard let self else { return }
+            if self.update({ if wasSaved { $0.favorites.insert(id) } else { $0.favorites.remove(id) } }) { self.notify("已撤销收藏操作") }
+        }
+    }
+    func follow(_ host: String) {
+        let wasFollowed = state.followedHosts.contains(host)
+        guard update({ if wasFollowed { $0.followedHosts.remove(host) } else { $0.followedHosts.insert(host) } }) else { return }
+        notify(wasFollowed ? "已取消关注" : "已关注组织") { [weak self] in
+            guard let self else { return }
+            if self.update({ if wasFollowed { $0.followedHosts.insert(host) } else { $0.followedHosts.remove(host) } }) { self.notify("已撤销关注操作") }
+        }
+    }
     func register(_ event: CampusEvent) -> Bool {
         update { state in
             guard let current = state.events.first(where: { $0.id == event.id }), SpaceRules.inCurrentSpace(current, state: state) else { throw EventError.invalid("请先进入该活动所属空间并验证学校身份。") }
@@ -150,8 +167,14 @@ final class AppStore {
         }
     }
     func markCurrentNoticesRead() {
-        let ids = Set(notices.map(\.id))
-        update { state in for i in state.notices.indices where ids.contains(state.notices[i].id) { state.notices[i].read = true } }
+        let ids = Set(notices.filter { !$0.read }.map(\.id))
+        guard !ids.isEmpty else { return }
+        if update({ state in for i in state.notices.indices where ids.contains(state.notices[i].id) { state.notices[i].read = true } }) {
+            notify("已标记 \(ids.count) 条消息为已读") { [weak self] in
+                guard let self else { return }
+                if self.update({ state in for i in state.notices.indices where ids.contains(state.notices[i].id) { state.notices[i].read = false } }) { self.notify("已恢复未读状态") }
+            }
+        }
     }
     func previewRecommendations() -> Int {
         let candidates = ranked(events).filter { SpaceRules.shouldRecommend($0, state: state) && !state.settings.recommendedEventIDs.contains($0.id) }.prefix(3)

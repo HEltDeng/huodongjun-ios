@@ -1,3 +1,5 @@
+> 2026-10-26 更新：0.3.0 已完成交互体系精修，37 项 XCTest 通过。最新组件清单、模拟器实测与限制见 [interaction-system.md](interaction-system.md)。以下保留此前版本的验收记录。
+
 # iOS 体验检查记录
 
 日期：2026-10-23。环境：iPhone 17 Pro / iOS 26.5 模拟器，Xcode 26.6。检查对象为本项目 0.1.0 本机体验版。

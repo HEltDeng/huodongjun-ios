@@ -12,5 +12,5 @@ __pycache__/
 *.sqlite*
 *.log
 docs/reference/*.png
-docs/screenshots/*.png
+docs/screenshots/
 

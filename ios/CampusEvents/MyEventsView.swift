@@ -27,22 +27,16 @@ struct MyEventsView: View {
                         EmptyState(symbol: filter == "收藏" ? "bookmark" : "calendar", title: filter == "我主办的" ? "把你的想法变成一场活动" : "这里还没有活动", subtitle: filter == "我主办的" ? "发起一次相聚，邀请同学一起参加。" : "在发现页找到喜欢的活动，加入你的校园日程。")
                         if filter == "我主办的" { Button { create = true } label: { Text("创建第一场活动").frame(maxWidth: .infinity) }.buttonStyle(PrimaryButton()) }
                     }
-                    ForEach(items) { event in
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(spacing: 10) { Circle().fill(Color.accentGreen.opacity(0.4)).frame(width: 8, height: 8); Text(event.start.formatted(.dateTime.month().day().weekday(.wide))).font(.subheadline.weight(.medium)); Spacer(); if event.cancelled { Tag(text: "活动已取消", color: .red) } }
-                            Button { selected = event } label: {
-                                VStack(alignment: .leading, spacing: 9) {
-                                    EventRow(event: event)
-                                    if let reg = store.registration(event.id) { HStack { Tag(text: reg.status.rawValue); Spacer(); if [.confirmed, .checkedIn].contains(reg.status) { Label("入场凭证", systemImage: "qrcode").font(.caption).foregroundStyle(.secondary) } } }
-                                }.padding(14).background(.white, in: RoundedRectangle(cornerRadius: 20))
-                            }.buttonStyle(SoftPressStyle())
-                        }
+                    if !items.isEmpty {
+                        EventCardStack(events: items) { selected = $0 }
+                        if items.count > 1 { ScheduleFocus(events: items) { selected = $0 } }
                     }
+
                 }.padding(22)
             }.background(Color.paper).toolbar(.hidden, for: .navigationBar)
-                .sheet(item: $selected) { EventDetailView(eventID: $0.id) }
-                .sheet(isPresented: $create) { EventEditorView() }
-                .onChange(of: store.contextID) { _, _ in selected = nil; create = false }
+                .sheet(item: $selected) { EventDetailView(eventID: $0.id).appSheet() }
+                .sheet(isPresented: $create) { EventEditorView().appSheet(.large, stops: [SheetSize.tall, .large]) }
+                .onChange(of: store.contextID) { _, _ in selected = nil }
         }
     }
 }
@@ -78,7 +72,7 @@ struct NoticesView: View {
                         ForEach(conversations) { event in NavigationLink { DiscussionView(eventID: event.id) } label: { HStack(spacing: 13) { EventCover(event: event).frame(width: 52, height: 52).clipped().clipShape(RoundedRectangle(cornerRadius: 12)); VStack(alignment: .leading, spacing: 7) { Text(event.title).font(.subheadline.bold()); Text(store.state.messages.last(where: { $0.eventID == event.id })?.body ?? "查看活动讨论").font(.caption).foregroundStyle(.secondary).lineLimit(1) }; Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) }.padding(14).background(.white, in: RoundedRectangle(cornerRadius: 17)) }.buttonStyle(SoftPressStyle()) }
                     }
                 }.padding(22)
-            }.background(Color.paper).toolbar(.hidden, for: .navigationBar).sheet(item: $selected) { EventDetailView(eventID: $0.id) }
+            }.background(Color.paper).toolbar(.hidden, for: .navigationBar).sheet(item: $selected) { EventDetailView(eventID: $0.id).appSheet() }
                 .onChange(of: store.contextID) { _, _ in selected = nil; path = NavigationPath() }
         }
     }
@@ -105,13 +99,14 @@ struct DiscussionView: View {
                     }.padding(20)
                 }.onChange(of: store.state.messages.count) { _, _ in if let last = store.state.messages.last { withAnimation(reduceMotion ? nil : .easeOut(duration: 0.22)) { proxy.scrollTo(last.id, anchor: .bottom) } } }
             }
+            InlineAlert(message: error).padding(.horizontal, 16)
             HStack(spacing: 12) {
                 TextField("聊聊这场活动…", text: $text, axis: .vertical).lineLimit(1...5).padding(12).background(.white, in: RoundedRectangle(cornerRadius: 16))
-                Button { if let event = store.event(eventID) { if store.postMessage(text, event: event) { text = "" } else { error = store.error; store.error = nil } } } label: { Image(systemName: "arrow.up").font(.headline).foregroundStyle(.white).frame(width: 42, height: 42).background(Color.ink, in: Circle()) }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityLabel("发送消息")
+                Button { if let event = store.event(eventID) { if store.postMessage(text, event: event) { text = ""; error = nil } else { error = store.error; store.error = nil } } } label: { Image(systemName: "arrow.up").font(.headline).foregroundStyle(.white).frame(width: 42, height: 42).background(Color.ink, in: Circle()) }.buttonStyle(SoftPressStyle()).disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityLabel("发送消息")
             }.padding(16).background(.regularMaterial)
         }
         } else { ContentUnavailableView("暂时无法进入讨论", systemImage: "lock", description: Text("请验证学校身份并完成活动报名。")) }
         }.background(Color.paper).navigationTitle(store.event(eventID)?.title ?? "活动讨论").navigationBarTitleDisplayMode(.inline)
-            .alert("无法发送", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("知道了") { error = nil } } message: { Text(error ?? "") }
+
     }
 }

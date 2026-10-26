@@ -14,12 +14,13 @@ struct EventDetailView: View {
     @State private var manage = false
     @State private var schools = false
     @State private var cancel = false
+    @State private var media = false
     var body: some View {
         NavigationStack {
             if let event = store.event(eventID) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 25) {
-                        EventCover(event: event).aspectRatio(1, contentMode: .fit).clipped().clipShape(RoundedRectangle(cornerRadius: 25))
+                        Button { media = true } label: { Color.clear.aspectRatio(1.22, contentMode: .fit).overlay { EventCover(event: event) }.clipped().clipShape(RoundedRectangle(cornerRadius: 25)).overlay(alignment: .bottomTrailing) { Image(systemName: "arrow.up.left.and.arrow.down.right").font(.caption.bold()).padding(11).background(.regularMaterial, in: Circle()).padding(13) } }.buttonStyle(SoftPressStyle()).accessibilityLabel("查看活动海报大图")
                         VStack(alignment: .leading, spacing: 12) {
                             HStack { Tag(text: event.scopeLabel); Tag(text: event.category.rawValue); if event.space == .campus && event.creditHundredths > 0 { Tag(text: "+\(event.creditText) 综测") }; if event.cancelled { Tag(text: "已取消", color: .red) } }
                             Text(event.title).font(.system(size: 29, weight: .bold)).fixedSize(horizontal: false, vertical: true)
@@ -30,7 +31,7 @@ struct EventDetailView: View {
                         }
                         Divider()
                         VStack(spacing: 20) {
-                            Button { calendar = true } label: { detailRow(icon: "calendar", title: event.start.formatted(.dateTime.month().day().weekday(.wide)), subtitle: "\(event.start.formatted(.dateTime.hour().minute())) – \(event.end.formatted(.dateTime.hour().minute()))", trailing: "添加日历") }.buttonStyle(.plain).accessibilityIdentifier("detail.calendar")
+                            Button { calendar = true } label: { detailRow(icon: "calendar", title: event.start.formatted(.dateTime.month().day().weekday(.wide)), subtitle: "\(event.start.formatted(.dateTime.hour().minute())) – \(event.end.formatted(.dateTime.hour().minute()))", trailing: "添加日历") }.buttonStyle(SoftPressStyle()).accessibilityIdentifier("detail.calendar")
                             detailRow(icon: "mappin.and.ellipse", title: event.location, subtitle: event.locationContext, trailing: nil)
                             detailRow(icon: "person.crop.rectangle", title: "报名对象", subtitle: event.audienceText, trailing: nil)
                             detailRow(icon: "person.2", title: "\(store.count(event)) 人已报名", subtitle: "限额 \(event.capacity) 人" + (event.requiresApproval ? " · 需要主办方审核" : " · 免费参加"), trailing: nil)
@@ -51,7 +52,7 @@ struct EventDetailView: View {
                         }
                         if event.space == .city { Text("校外活动保留参与记录，综测由所属学校另行认定。").font(.footnote).foregroundStyle(.secondary) }
                         if event.group.available {
-                            Button { group = true } label: { HStack(spacing: 13) { Image(systemName: "qrcode").font(.title2).frame(width: 42, height: 42).background(.white, in: RoundedRectangle(cornerRadius: 12)); VStack(alignment: .leading, spacing: 4) { Text(event.group.name).font(.subheadline.bold()); Text(event.group.platform + " · " + (event.group.membersOnly ? "报名成功后可加入" : "点击查看入群方式")).font(.caption).foregroundStyle(.secondary) }; Spacer(); Image(systemName: "chevron.right").font(.caption) }.padding(15).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18)) }.buttonStyle(.plain).accessibilityIdentifier("detail.group")
+                            Button { group = true } label: { HStack(spacing: 13) { Image(systemName: "qrcode").font(.title2).frame(width: 42, height: 42).background(.white, in: RoundedRectangle(cornerRadius: 12)); VStack(alignment: .leading, spacing: 4) { Text(event.group.name).font(.subheadline.bold()); Text(event.group.platform + " · " + (event.group.membersOnly ? "报名成功后可加入" : "点击查看入群方式")).font(.caption).foregroundStyle(.secondary) }; Spacer(); Image(systemName: "chevron.right").font(.caption) }.padding(15).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18)) }.buttonStyle(SoftPressStyle()).accessibilityIdentifier("detail.group")
                         }
                         if event.hostID == store.profile.id {
                             Button { manage = true } label: { Label("管理活动", systemImage: "slider.horizontal.3").frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large).accessibilityIdentifier("detail.manage")
@@ -61,33 +62,32 @@ struct EventDetailView: View {
                         }
                     }.padding(.horizontal, 22).padding(.top, 10).padding(.bottom, 24)
                 }.background(Color.paper)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) { Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("关闭活动详情") }
-                    ToolbarItemGroup(placement: .topBarTrailing) {
-                        Button { store.favorite(event.id) } label: { Image(systemName: store.state.favorites.contains(event.id) ? "bookmark.fill" : "bookmark") }.accessibilityLabel(store.state.favorites.contains(event.id) ? "取消收藏" : "收藏活动").accessibilityIdentifier("detail.favorite")
-                        ShareLink(item: event.shareText) { Image(systemName: "square.and.arrow.up") }.accessibilityLabel("分享活动")
-                    }
-                }.navigationBarTitleDisplayMode(.inline)
+                .navigationTitle("活动详情").navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .bottom) {
-                    HStack(spacing: 18) {
-                        VStack(alignment: .leading, spacing: 4) { Text(store.registration(event.id)?.status.rawValue ?? (event.cancelled ? "已取消" : "免费参加")).font(.subheadline.bold()); Text(event.deadline.formatted(.dateTime.month().day().hour().minute()) + " 截止").font(.caption2).foregroundStyle(.secondary) }
-                        Spacer(minLength: 0)
-                        Button {
-                            if !store.eligible(event) { schools = true }
-                            else if let reg = store.registration(event.id), [.confirmed, .checkedIn].contains(reg.status) { ticket = true }
-                            else { registrationSheet = true }
-                        } label: { Text(cta(event)).frame(minWidth: 105) }.buttonStyle(PrimaryButton())
-                            .disabled((!store.eligible(event) && !SpaceRules.verifiedSchools(store.state).isEmpty) || event.cancelled || (store.registration(event.id) == nil && event.deadline <= Date()) || [.pending, .waitlisted].contains(store.registration(event.id)?.status ?? .cancelled))
-                            .accessibilityIdentifier("detail.register")
-                    }.padding(.horizontal, 22).padding(.vertical, 13).background(.regularMaterial)
+                    VStack(spacing: 9) {
+                        HStack { Text(store.registration(event.id)?.status.rawValue ?? (event.cancelled ? "已取消" : "免费参加")).font(.caption.weight(.semibold)); Spacer(); Text(event.deadline.formatted(.dateTime.month().day().hour().minute()) + " 截止").font(.caption2).foregroundStyle(.secondary) }
+                        HStack(spacing: 8) {
+                            Button { dismiss() } label: { Image(systemName: "xmark").frame(width: 44, height: 48) }.buttonStyle(SoftPressStyle()).accessibilityLabel("关闭活动详情")
+                            Button { store.favorite(event.id) } label: { Image(systemName: store.state.favorites.contains(event.id) ? "bookmark.fill" : "bookmark").frame(width: 44, height: 48).foregroundStyle(Color.accentGreen) }.buttonStyle(SoftPressStyle()).accessibilityLabel(store.state.favorites.contains(event.id) ? "取消收藏" : "收藏活动").accessibilityIdentifier("detail.favorite")
+                            ShareLink(item: event.shareText) { Image(systemName: "square.and.arrow.up").frame(width: 44, height: 48) }.buttonStyle(SoftPressStyle()).accessibilityLabel("分享活动")
+                            Button {
+                                if !store.eligible(event) { schools = true }
+                                else if let reg = store.registration(event.id), [.confirmed, .checkedIn].contains(reg.status) { ticket = true }
+                                else { registrationSheet = true }
+                            } label: { Text(cta(event)).frame(maxWidth: .infinity).lineLimit(2).minimumScaleFactor(0.8) }.buttonStyle(PrimaryButton())
+                                .disabled((!store.eligible(event) && !SpaceRules.verifiedSchools(store.state).isEmpty) || event.cancelled || (store.registration(event.id) == nil && event.deadline <= Date()) || [.pending, .waitlisted].contains(store.registration(event.id)?.status ?? .cancelled))
+                                .accessibilityIdentifier("detail.register")
+                        }
+                    }.padding(.horizontal, 18).padding(.vertical, 11).background(.regularMaterial)
                 }
-                .sheet(isPresented: $registrationSheet) { RegistrationView(eventID: event.id) }
-                .sheet(isPresented: $ticket) { TicketView(eventID: event.id) }
-                .sheet(isPresented: $group) { GroupView(eventID: event.id) }
+                .fullScreenCover(isPresented: $media) { if let image = event.imageData.flatMap({ UIImage(data: $0) }) ?? UIImage(named: event.cover) { MediaLightbox(image: image) } }
+                .sheet(isPresented: $registrationSheet) { RegistrationView(eventID: event.id).appSheet() }
+                .sheet(isPresented: $ticket) { TicketView(eventID: event.id).appSheet() }
+                .sheet(isPresented: $group) { GroupView(eventID: event.id).appSheet(SheetSize.half) }
                 .sheet(isPresented: $calendar) { CalendarEditor(event: event).ignoresSafeArea() }
-                .sheet(isPresented: $manage) { ManageEventView(eventID: event.id) }
-                .sheet(isPresented: $schools) { SchoolPickerView() }
-                .confirmationDialog("确定取消这场活动的报名？", isPresented: $cancel, titleVisibility: .visible) { Button("取消报名", role: .destructive) { if let reg = store.registration(event.id) { store.cancel(reg) } } }
+                .sheet(isPresented: $manage) { ManageEventView(eventID: event.id).appSheet(.large, stops: [SheetSize.tall, .large]) }
+                .sheet(isPresented: $schools) { SchoolPickerView().appSheet(SheetSize.half) }
+                .bottomActions("取消报名后，原入场凭证将失效。", isPresented: $cancel, cancelTitle: "保留报名", actions: [SheetAction("取消报名", role: .destructive) { if let reg = store.registration(event.id) { store.cancel(reg); if store.error == nil { store.notify("已取消报名，原入场凭证已失效") } } }])
             } else { ContentUnavailableView("活动不存在", systemImage: "calendar.badge.exclamationmark") }
         }
     }
@@ -109,47 +109,55 @@ struct RegistrationView: View {
     @Environment(\.dismiss) private var dismiss
     var eventID: UUID
     @State private var name = ""
-    @State private var number = ""
-    @State private var college = ""
     @State private var agreed = false
+    @State private var attempted = false
     @State private var success = false
     @State private var service = false
+    @State private var error: String?
     var body: some View {
         NavigationStack {
             if let event = store.event(eventID) {
                 if success {
-                    VStack(spacing: 23) {
-                        Spacer()
-                        Image(systemName: "checkmark.circle.fill").font(.system(size: 62)).foregroundStyle(Color.accentGreen)
+                    VStack(spacing: 22) {
+                        Spacer(minLength: 20)
+                        Image(systemName: "checkmark.circle.fill").font(.system(size: 58)).foregroundStyle(Color.accentGreen)
                         Text(store.registration(eventID)?.status.rawValue ?? "已提交报名").font(.title.bold())
                         Text(event.title).font(.headline).multilineTextAlignment(.center)
                         Text(event.start.formatted(date: .complete, time: .shortened)).font(.subheadline).foregroundStyle(.secondary)
-                        if let reg = store.registration(eventID), reg.status == .confirmed { TicketCode(code: "huodongjun:local-ticket:\(reg.ticketCode)").frame(width: 180, height: 180); Text("本机体验票").font(.caption).foregroundStyle(.secondary) }
-                        Spacer()
+                        if let reg = store.registration(eventID), reg.status == .confirmed { TicketCode(code: "huodongjun:local-ticket:\(reg.ticketCode)").frame(width: 180, height: 180) }
+                        Spacer(minLength: 20)
                         Button { dismiss() } label: { Text("完成").frame(maxWidth: .infinity) }.buttonStyle(PrimaryButton()).accessibilityIdentifier("registration.done")
-                    }.padding(28).background(Color.paper)
+                    }.padding(24).background(Color.paper)
                 } else {
                     Form {
-                        Section { HStack(spacing: 14) { EventCover(event: event).frame(width: 65, height: 65).clipped().clipShape(RoundedRectangle(cornerRadius: 12)); VStack(alignment: .leading, spacing: 7) { Text(event.title).font(.headline); Text(event.start.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary) } } }
+                        Section { HStack(spacing: 14) { EventCover(event: event).frame(width: 65, height: 65).clipped().clipShape(RoundedRectangle(cornerRadius: 14)); VStack(alignment: .leading, spacing: 7) { Text(event.title).font(.headline); Text(event.start.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary) } } }
                         Section("报名信息") {
-                            TextField("姓名", text: $name).textContentType(.name).accessibilityIdentifier("registration.name")
-                            LabeledContent("学校", value: SpaceRules.membership(for: event, state: store.state).map { School.named($0.schoolID).name } ?? "待验证")
-                            LabeledContent("学号", value: number)
-                            LabeledContent("学院", value: college)
+                            VStack(alignment: .leading) { TextField("姓名", text: $name).textContentType(.name).accessibilityIdentifier("registration.name"); InlineAlert(message: attempted ? FormValidation.required(name, title: "姓名") : nil) }
+                            let membership = SpaceRules.membership(for: event, state: store.state)
+                            LabeledContent("学校", value: membership.map { School.named($0.schoolID).name } ?? "待验证")
+                            LabeledContent("学号", value: membership?.studentNumber ?? "待验证")
+                            LabeledContent("学院", value: membership?.college ?? "待验证")
                         }
                         Section {
                             Toggle("确认报名信息，并同意服务说明", isOn: $agreed).font(.subheadline)
+                            InlineAlert(message: attempted && !agreed ? "请先确认报名信息并阅读服务说明" : nil)
                             Button("查看服务说明") { service = true }
                         }
-                        Section {
-                            Button {
-                                guard agreed else { return }
-                                if store.update({ $0.profile.name = name.trimmingCharacters(in: .whitespacesAndNewlines); $0.consented = true }), store.register(event) { success = true }
-                            } label: { Text("确认报名").frame(maxWidth: .infinity) }.buttonStyle(PrimaryButton()).listRowBackground(Color.clear).listRowInsets(EdgeInsets()).disabled(!agreed || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || number.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || college.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityIdentifier("registration.submit")
+                    }.scrollContentBackground(.hidden).background(Color.paper).navigationTitle("报名活动").navigationBarTitleDisplayMode(.inline)
+                        .safeAreaInset(edge: .bottom) {
+                            VStack(spacing: 10) {
+                                InlineAlert(message: error)
+                                CompletionButton(title: "确认报名", symbol: "ticket", action: {
+                                    attempted = true
+                                    guard agreed, FormValidation.required(name, title: "姓名") == nil else { return false }
+                                    let ok = store.update { $0.profile.name = name.trimmingCharacters(in: .whitespacesAndNewlines); $0.consented = true } && store.register(event)
+                                    if !ok { error = store.error; store.error = nil }; return ok
+                                }, completed: { success = true }).accessibilityIdentifier("registration.submit")
+                                Button("取消") { dismiss() }.buttonStyle(QuietButton())
+                            }.padding(20).background(.regularMaterial)
                         }
-                    }.navigationTitle("报名活动").navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .topBarLeading) { Button("取消") { dismiss() } } }
-                    .onAppear { name = store.profile.name; number = SpaceRules.membership(for: event, state: store.state)?.studentNumber ?? ""; college = SpaceRules.membership(for: event, state: store.state)?.college ?? "" }
-                    .sheet(isPresented: $service) { ServiceInfoView() }
+                        .onAppear { name = store.profile.name }
+                        .sheet(isPresented: $service) { ServiceInfoView().appSheet() }
                 }
             }
         }
@@ -183,10 +191,10 @@ struct TicketView: View {
                         Tag(text: reg.status.rawValue)
                         Text(store.profile.name).font(.headline)
                         Text("本机体验票 · 仅用于功能联调").font(.caption).foregroundStyle(.secondary)
-                        Button(copied ? "已复制核销码" : "复制核销码") { UIPasteboard.general.string = "huodongjun:local-ticket:\(reg.ticketCode)"; copied = true }.font(.footnote)
+                        Button(copied ? "已复制核销码" : "复制核销码") { UIPasteboard.general.string = "huodongjun:local-ticket:\(reg.ticketCode)"; copied = true; store.notify("核销码已复制") }.font(.footnote)
                         if event.group.available { NavigationLink { GroupContent(eventID: eventID) } label: { Label("进入活动群", systemImage: "person.2").frame(maxWidth: .infinity) }.buttonStyle(PrimaryButton()) }
                     }.padding(24).background(.white, in: RoundedRectangle(cornerRadius: 25)).padding(22)
-                }.background(Color.paper).navigationTitle("入场凭证").navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { dismiss() } } }
+                }.background(Color.paper).navigationTitle("入场凭证").navigationBarTitleDisplayMode(.inline).bottomDismiss()
             }
         }
     }

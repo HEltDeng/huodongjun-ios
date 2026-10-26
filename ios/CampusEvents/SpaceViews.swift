@@ -67,8 +67,8 @@ struct SchoolPickerView: View {
                     }
                 }.padding(22)
             }.background(Color.paper).navigationTitle("学校与身份").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { dismiss() } } }
-                .sheet(item: $verifying) { school in SchoolVerificationView(school: school) { verifying = nil; dismiss() } }
+                .bottomDismiss()
+                .sheet(item: $verifying) { school in SchoolVerificationView(school: school) { verifying = nil; dismiss() }.appSheet() }
         }
     }
 }
@@ -80,6 +80,8 @@ struct SchoolVerificationView: View {
     @State private var number = "DEMO2026001"
     @State private var college = "计算机与通信工程学院"
     @State private var submitted = false
+    @State private var attempted = false
+    @State private var formError: String?
     var status: VerificationStatus? { store.state.settings.memberships.first { $0.schoolID == school.id }?.status }
     var body: some View {
         NavigationStack {
@@ -94,21 +96,27 @@ struct SchoolVerificationView: View {
                         }.foregroundStyle(Color.accentGreen).padding(17).frame(maxWidth: .infinity, alignment: .leading).background(Color.accentGreen.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
                     }
                     VStack(alignment: .leading, spacing: 17) {
-                        VStack(alignment: .leading, spacing: 8) { Text("学号").font(.caption).foregroundStyle(.secondary); TextField("填写学号", text: $number).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("verify.number") }
+                        VStack(alignment: .leading, spacing: 8) { Text("学号").font(.caption).foregroundStyle(.secondary); TextField("填写学号", text: $number).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("verify.number"); InlineAlert(message: attempted && number.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "请填写学号" : nil) }
                         Divider()
-                        VStack(alignment: .leading, spacing: 8) { Text("学院").font(.caption).foregroundStyle(.secondary); TextField("填写学院", text: $college).accessibilityIdentifier("verify.college") }
+                        VStack(alignment: .leading, spacing: 8) { Text("学院").font(.caption).foregroundStyle(.secondary); TextField("填写学院", text: $college).accessibilityIdentifier("verify.college"); InlineAlert(message: attempted && college.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "请填写学院" : nil) }
                     }.padding(19).background(.white, in: RoundedRectangle(cornerRadius: 20))
                     VStack(spacing: 12) {
-                        Button { apply(.demoVerified) } label: { Label(status == .pending ? "模拟审核通过" : "模拟验证通过", systemImage: "checkmark.seal").frame(maxWidth: .infinity) }.buttonStyle(PrimaryButton()).accessibilityIdentifier("verify.pass")
+                        CompletionButton(title: status == .pending ? "模拟审核通过" : "模拟验证通过", symbol: "checkmark.seal", action: {
+                            attempted = true
+                            guard !number.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !college.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+                            let ok = store.verifyDemo(schoolID: school.id, number: number, college: college, status: .demoVerified)
+                            if !ok { formError = store.error; store.error = nil }; return ok
+                        }, completed: { completed(); dismiss() }).accessibilityIdentifier("verify.pass")
+                        InlineAlert(message: formError)
                         HStack(spacing: 12) {
                             Button("模拟提交审核") { apply(.pending) }.frame(maxWidth: .infinity)
                             Button("模拟未通过") { apply(.rejected) }.frame(maxWidth: .infinity)
                         }.buttonStyle(.bordered).controlSize(.large).font(.subheadline)
-                    }.disabled(number.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || college.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                     Text("学校认证服务尚未接入。本页只模拟验证结果，学号不会提交给学校；正式身份须由学校认可的渠道验证。").font(.footnote).foregroundStyle(.secondary).lineSpacing(4)
                 }.padding(24)
             }.background(Color.paper).navigationTitle("验证学校身份").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .topBarLeading) { Button("取消") { dismiss() } } }
+                .bottomDismiss("取消")
                 .onAppear { if let member = store.state.settings.memberships.first(where: { $0.schoolID == school.id }) { number = member.studentNumber; college = member.college } }
         }
     }
@@ -134,6 +142,7 @@ struct InterestSelectionView: View {
                         Text(onboarding ? "最后一步 · 选择兴趣" : "让好活动更懂你").font(.caption.weight(.medium)).foregroundStyle(Color.accentGreen)
                         Text("想遇见什么？").font(.system(size: 32, weight: .bold))
                         Text("选几个喜欢的方向，也可以稍后再选。").font(.subheadline).foregroundStyle(.secondary)
+                        ProgressOrbit(count: selected.count, total: Interest.allCases.count)
                     }.padding(.top, 16)
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                         ForEach(Interest.allCases) { interest in
@@ -153,16 +162,19 @@ struct InterestSelectionView: View {
                     }
                 }.padding(.horizontal, 23).padding(.bottom, 22)
             }.background(Color.paper).navigationTitle("兴趣偏好").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .topBarLeading) { if !onboarding { Button("取消") { dismiss() } } }; ToolbarItem(placement: .topBarTrailing) { Button("跳过") { selected = []; save() } } }
+
                 .safeAreaInset(edge: .bottom) {
-                    VStack(spacing: 12) { HStack { Text("已选择 \(selected.count) 个方向").font(.caption).foregroundStyle(.secondary); Spacer(); Text("随时可以修改").font(.caption).foregroundStyle(.secondary) }; Button { save() } label: { Text(onboarding ? "开启校园生活" : "保存兴趣偏好").frame(maxWidth: .infinity) }.buttonStyle(PrimaryButton()).accessibilityIdentifier("interests.save") }.padding(.horizontal, 23).padding(.vertical, 16).background(.regularMaterial)
+                    VStack(spacing: 12) { HStack { Text("已选择 \(selected.count) 个方向").font(.caption).foregroundStyle(.secondary); Spacer(); Text("随时可以修改").font(.caption).foregroundStyle(.secondary) }; CompletionButton(title: onboarding ? "开启校园生活" : "保存兴趣偏好", action: { store.update { $0.settings.interests = selected } }, completed: { finish() }).accessibilityIdentifier("interests.save")
+                        if !onboarding { Button("取消") { dismiss() }.buttonStyle(QuietButton()) } else { Button("稍后选择") { selected = []; save() }.buttonStyle(QuietButton()) } }.padding(.horizontal, 23).padding(.vertical, 16).background(.regularMaterial)
                 }
                 .onAppear { selected = store.state.settings.interests }
                 .sensoryFeedback(.selection, trigger: selected)
         }
     }
-    func save() {
-        if store.update({ $0.settings.interests = selected; if onboarding { $0.settings.setupCompleted = true } }) { completed(); dismiss() }
+    func save() { if store.update({ $0.settings.interests = selected }) { finish() } }
+    func finish() {
+        if onboarding && !store.update({ $0.settings.setupCompleted = true }) { return }
+        completed(); dismiss()
     }
 }
 struct SpaceOnboardingView: View {
@@ -184,7 +196,7 @@ struct SpaceOnboardingView: View {
                     }.padding(24)
                 }.background(Color.paper)
                     .safeAreaInset(edge: .bottom) { Button("先逛逛长沙开放活动") { store.update { $0.settings.activeSpace = .city; $0.settings.setupCompleted = true } }.font(.subheadline.weight(.medium)).frame(maxWidth: .infinity).padding(22).background(.regularMaterial) }
-                    .sheet(item: $verifying) { school in SchoolVerificationView(school: school) { verifying = nil; interests = true } }
+                    .sheet(item: $verifying) { school in SchoolVerificationView(school: school) { verifying = nil; interests = true }.appSheet() }
             }
         }
     }
@@ -197,7 +209,7 @@ struct CampusAccessPrompt: View {
             EmptyState(symbol: "building.2.crop.circle", title: "进入你的校园", subtitle: "验证学校身份，解锁本校的活动与讨论。")
             Button { schools = true } label: { Text("选择学校并验证").frame(maxWidth: .infinity) }.buttonStyle(PrimaryButton())
             Button("先发现长沙") { store.switchSpace(.city) }.font(.subheadline)
-        }.padding(.horizontal, 22).padding(.bottom, 30).sheet(isPresented: $schools) { SchoolPickerView() }
+        }.padding(.horizontal, 22).padding(.bottom, 30).sheet(isPresented: $schools) { SchoolPickerView().appSheet(SheetSize.half) }
     }
 }
 struct RecommendationSettingsView: View {
@@ -211,6 +223,7 @@ struct RecommendationSettingsView: View {
                 Picker("频率", selection: Binding(get: { store.state.settings.frequency }, set: { value in store.update { $0.settings.frequency = value } })) { ForEach(RecommendationFrequency.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
             }
             Section {
+                if let result { Text(result).font(.footnote).foregroundStyle(.secondary) }
                 Button("开启系统推荐提醒") { Task {
                     do {
                         let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
@@ -221,6 +234,5 @@ struct RecommendationSettingsView: View {
                 Button("预览\(store.space.title)兴趣精选") { let count = store.previewRecommendations(); result = count > 0 ? "已生成 \(count) 条精选，可在\(store.space.title)消息中查看。" : "暂无新的匹配活动。请检查兴趣、学校验证与当前空间的推荐开关；已有精选不会重复生成。" }
             } footer: { Text("报名结果、活动变更和签到提醒独立处理。当前为本机体验，远程新活动推送待接入后台。") }
         }.navigationTitle("推荐提醒").navigationBarTitleDisplayMode(.inline)
-            .alert("推荐提醒", isPresented: Binding(get: { result != nil }, set: { if !$0 { result = nil } })) { Button("知道了") { result = nil } } message: { Text(result ?? "") }
     }
 }

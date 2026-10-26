@@ -17,19 +17,13 @@ struct CampusEventsApp: App {
 
 struct RootView: View {
     @Environment(AppStore.self) private var store
-    @State private var tab = 0
     var body: some View {
         @Bindable var store = store
         Group {
             if store.state.onboarded && !store.state.settings.setupCompleted {
                 SpaceOnboardingView()
             } else if store.state.onboarded {
-                TabView(selection: $tab) {
-                    Tab("发现", systemImage: "sparkles", value: 0) { DiscoverView() }
-                    Tab("活动", systemImage: "calendar", value: 1) { MyEventsView() }
-                    Tab("消息", systemImage: "bell", value: 2) { NoticesView() }.badge(store.unread)
-                    Tab("我的", systemImage: "person.crop.circle", value: 3) { ProfileView() }
-                }
+                NavigationShell()
             } else { WelcomeView() }
         }
         .alert("暂时无法完成", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
@@ -68,8 +62,8 @@ struct WelcomeView: View {
                 }.padding(.top, 5)
             }.padding(.horizontal, 28).padding(.bottom, 24)
         }.background(Color.paper)
-        .sheet(isPresented: $service) { ServiceInfoView() }
-        .sheet(isPresented: $onboarding) { IdentityEditor(isOnboarding: true) }
+        .sheet(isPresented: $service) { ServiceInfoView().appSheet() }
+        .sheet(isPresented: $onboarding) { IdentityEditor(isOnboarding: true).appSheet() }
     }
 }
 

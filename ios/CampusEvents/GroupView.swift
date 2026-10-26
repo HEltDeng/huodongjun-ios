@@ -5,7 +5,7 @@ import Vision
 struct GroupView: View {
     @Environment(\.dismiss) private var dismiss
     var eventID: UUID
-    var body: some View { NavigationStack { GroupContent(eventID: eventID).toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { dismiss() } } } } }
+    var body: some View { NavigationStack { GroupContent(eventID: eventID).bottomDismiss() } }
 }
 
 struct GroupContent: View {
@@ -33,24 +33,20 @@ struct GroupContent: View {
                         if !event.group.notice.isEmpty { Text(event.group.notice).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center).textSelection(.enabled) }
                         if let url = EventRules.safeGroupURL(event.group.link) ?? detectedLink {
                             Button { confirmLink = true } label: { Label("打开群链接", systemImage: "arrow.up.right.square").frame(maxWidth: .infinity) }.buttonStyle(PrimaryButton())
-                                .confirmationDialog("前往 \(url.host ?? "群链接")", isPresented: $confirmLink, titleVisibility: .visible) { Button("打开链接") { UIApplication.shared.open(url) { ok in if !ok { message = "未能打开群链接，请检查链接是否有效。" } } } }
+                                .bottomActions("前往 \(url.host ?? "群链接")", isPresented: $confirmLink, actions: [SheetAction("打开链接") { UIApplication.shared.open(url) { ok in if !ok { message = "未能打开群链接，请检查链接是否有效。" } } }])
                         }
                         Button { openPlatform(event.group.platform) } label: { Label("打开\(event.group.platform)", systemImage: "arrow.up.forward.app").frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large)
+                        InlineAlert(message: message)
                         if !event.group.available { EmptyState(symbol: "qrcode", title: "主办方还未添加群信息", subtitle: "群二维码发布后会显示在这里。") }
                     }.padding(25)
                     .task(id: event.group.imageData) { detectedLink = detectHTTPS(event.group.imageData) }
-                    .sheet(isPresented: $zoom) {
-                        NavigationStack {
-                            if let data = event.group.imageData, let image = UIImage(data: data) {
-                                ZoomImage(image: image).background(Color.black).ignoresSafeArea(edges: .bottom)
-                                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { zoom = false } } }
-                            }
-                        }
+                    .fullScreenCover(isPresented: $zoom) {
+                        if let data = event.group.imageData, let image = UIImage(data: data) { MediaLightbox(image: image) }
                     }
                 }
             }
         }.background(Color.paper).navigationTitle("活动群").navigationBarTitleDisplayMode(.inline)
-        .alert("活动群", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) { Button("知道了", role: .cancel) { message = nil } } message: { Text(message ?? "") }
+
     }
     func openPlatform(_ platform: String) {
         let url = URL(string: platform == "QQ" ? "mqq://" : "weixin://")!
@@ -60,7 +56,7 @@ struct GroupContent: View {
     func savePhoto(_ image: UIImage) {
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else { Task { @MainActor in message = "请在系统设置中允许活动君添加照片，之后再保存二维码。" }; return }
-            PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: image) } completionHandler: { success, _ in Task { @MainActor in message = success ? "二维码已保存到相册。打开微信或 QQ，使用扫一扫从相册选择即可。" : "图片保存失败，请稍后再试。" } }
+            PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAsset(from: image) } completionHandler: { success, _ in Task { @MainActor in if success { message = nil; store.notify("二维码已保存到相册") } else { message = "图片保存失败，请稍后再试。" } } }
         }
     }
     func detectHTTPS(_ data: Data?) -> URL? {
@@ -68,21 +64,5 @@ struct GroupContent: View {
         let request = VNDetectBarcodesRequest(); request.symbologies = [.qr]
         try? VNImageRequestHandler(cgImage: image).perform([request])
         return request.results?.compactMap { $0.payloadStringValue.flatMap(EventRules.safeGroupURL) }.first
-    }
-}
-
-struct ZoomImage: UIViewRepresentable {
-    let image: UIImage
-    func makeCoordinator() -> Coordinator { Coordinator() }
-    func makeUIView(context: Context) -> UIScrollView {
-        let scroll = UIScrollView(); scroll.delegate = context.coordinator; scroll.minimumZoomScale = 1; scroll.maximumZoomScale = 5
-        let imageView = UIImageView(image: image); imageView.contentMode = .scaleAspectFit; imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        scroll.addSubview(imageView); context.coordinator.imageView = imageView
-        return scroll
-    }
-    func updateUIView(_ scroll: UIScrollView, context: Context) { context.coordinator.imageView?.frame = scroll.bounds }
-    class Coordinator: NSObject, UIScrollViewDelegate {
-        var imageView: UIImageView?
-        func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
     }
 }

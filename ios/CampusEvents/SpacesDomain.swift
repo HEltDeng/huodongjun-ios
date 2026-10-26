@@ -45,6 +45,7 @@ struct SpaceSettings: Codable, Equatable {
     var setupCompleted = false
     var demoSeedsAdded = false
     var demoContentRevision: Int? = nil
+    var interactionTourSeen: Bool? = nil
     var recommendedEventIDs = Set<UUID>()
 }
 struct EventAccess: Codable, Equatable {
