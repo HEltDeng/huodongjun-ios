@@ -3,6 +3,7 @@ import SwiftUI
 struct DiscoverView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var create = false
     @State private var search = ""
     @State private var schools = false
     @State private var interests = false
@@ -39,7 +40,7 @@ struct DiscoverView: View {
                             Button { spaces = true } label: { Label(store.space == .campus ? store.school.name : "长沙 · 高校开放活动", systemImage: "location.fill").font(.subheadline).foregroundStyle(.secondary) }.buttonStyle(SoftPressStyle())
                         }
                         Spacer()
-                        Button { NotificationCenter.default.post(name: .showInteractionTour, object: nil) } label: { Image(systemName: "questionmark").font(.system(size: 15, weight: .semibold)).frame(width: 44, height: 44).background(.white, in: Circle()) }.buttonStyle(SoftPressStyle()).accessibilityLabel("查看操作引导")
+                        Button { create = true } label: { Image(systemName: "plus").font(.system(size: 20, weight: .medium)).frame(width: 44, height: 44).background(.white, in: Circle()) }.buttonStyle(SoftPressStyle()).accessibilityLabel("发布活动").accessibilityIdentifier("nav.create")
                     }.padding(.horizontal, 22).padding(.top, 16)
                     SpaceSwitcher().padding(.horizontal, 22)
                     HStack(spacing: 17) {
@@ -89,6 +90,7 @@ struct DiscoverView: View {
                         quick("筛选", icon: "line.3.horizontal.decrease") { filters = true }
                     }.padding(.vertical, 3).background(.regularMaterial, in: Capsule()).padding(.horizontal, 28).padding(.bottom, 10)
                 }
+                .sheet(isPresented: $create) { EventEditorView().appSheet(.large, stops: [SheetSize.tall, .large]) }
                 .sheet(item: $selected) { EventDetailView(eventID: $0.id).appSheet() }
                 .sheet(isPresented: $schools) { SchoolPickerView().appSheet(SheetSize.half) }
                 .sheet(isPresented: $interests) { InterestSelectionView().appSheet() }

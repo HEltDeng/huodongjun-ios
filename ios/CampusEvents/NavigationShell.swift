@@ -17,17 +17,16 @@ struct NavigationShell: View {
     @State private var previous = 0
     @State private var progress: CGFloat = 1
     @State private var transitionTask: Task<Void, Never>?
-    @State private var create = false
     @State private var guide = false
     @State private var guideStep = 0
     @Namespace private var navSelection
-    private let titles = ["发现", "活动", "消息", "我的"]
-    private let icons = ["sparkles", "calendar", "bubble.left.and.bubble.right", "person.crop.circle"]
-    private let positions: [CGFloat] = [0.14, 0.32, 0.68, 0.86]
+    private let titles = ["发现", "活动", "赛事", "消息", "我的"]
+    private let icons = ["sparkles", "calendar", "trophy", "bubble.left.and.bubble.right", "person.crop.circle"]
+    private let positions: [CGFloat] = [0.10, 0.30, 0.50, 0.70, 0.90]
     var body: some View {
         VStack(spacing: 0) {
         ZStack {
-            ForEach(0..<4) { index in
+            ForEach(0..<5) { index in
                 page(index).background(Color.paper)
                     .mask(RadialReveal(progress: index == tab ? progress : 1, x: positions[tab]))
                     .opacity(index == tab || index == previous ? 1 : 0)
@@ -38,25 +37,17 @@ struct NavigationShell: View {
             VStack(spacing: 0) {
                 Color.clear.frame(height: 0).snackBar()
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 5), spacing: 0) {
-                    navButton(0); navButton(1)
-                    Button { create = true } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: "plus").font(.system(size: 23, weight: .medium)).foregroundStyle(.white)
-                                .frame(width: 44, height: 44).background(Color.ink, in: RoundedRectangle(cornerRadius: 15))
-                            Text("发布").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.ink)
-                        }.frame(maxWidth: .infinity).frame(height: 68).contentShape(Rectangle())
-                    }.buttonStyle(SoftPressStyle()).accessibilityLabel("发布活动").accessibilityIdentifier("nav.create").anchorPreference(key: NavAnchors.self, value: .bounds) { [4: $0] }
-                    navButton(2); navButton(3)
+                    ForEach(0..<5) { navButton($0) }
                 }.animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.85), value: tab)
                     .padding(5).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26))
                     .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.85), lineWidth: 1))
                     .shadow(color: Color.ink.opacity(0.06), radius: 12, y: 4).padding(.horizontal, 16).padding(.top, 5).padding(.bottom, 6)
 
             }
-        }.background(Color.paper).sheet(isPresented: $create) { EventEditorView().appSheet(.large, stops: [SheetSize.tall, .large]) }
+        }.background(Color.paper)
             .overlayPreferenceValue(NavAnchors.self) { anchors in
                 if guide { GeometryReader { geometry in
-                    if let anchor = anchors[guideStep == 0 ? 0 : guideStep == 1 ? 4 : 2] { tour(focus: geometry[anchor].insetBy(dx: -3, dy: -3), clearance: geometry.size.height - geometry[anchor].minY + 18) }
+                    if let anchor = anchors[guideStep == 0 ? 0 : guideStep == 1 ? 2 : 3] { tour(focus: geometry[anchor].insetBy(dx: -3, dy: -3), clearance: geometry.size.height - geometry[anchor].minY + 18) }
                 }.ignoresSafeArea() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .openMyActivities)) { _ in select(1) }
@@ -66,19 +57,19 @@ struct NavigationShell: View {
             .onDisappear { transitionTask?.cancel() }
     }
     @ViewBuilder func page(_ index: Int) -> some View {
-        switch index { case 0: DiscoverView(); case 1: MyEventsView(); case 2: NoticesView(); default: ProfileView() }
+        switch index { case 0: DiscoverView(); case 1: MyEventsView(); case 2: CompetitionsView(); case 3: NoticesView(); default: ProfileView() }
     }
     func navButton(_ index: Int) -> some View {
         Button { select(index) } label: {
             VStack(spacing: 4) {
                 Image(systemName: icons[index]).font(.system(size: 24, weight: .regular)).frame(width: 44, height: 44).symbolEffect(.bounce, value: reduceMotion ? false : tab == index)
-                    .overlay(alignment: .topTrailing) { if index == 2 && store.unread > 0 { Circle().fill(Color.orange).frame(width: 7, height: 7).offset(x: -3, y: 5) } }
+                    .overlay(alignment: .topTrailing) { if index == 3 && store.unread > 0 { Circle().fill(Color.orange).frame(width: 7, height: 7).offset(x: -3, y: 5) } }
                 Text(titles[index]).font(.system(size: 12, weight: tab == index ? .semibold : .medium))
             }.frame(maxWidth: .infinity).frame(height: 68).contentShape(Rectangle()).foregroundStyle(tab == index ? Color.accentGreen : Color.secondary)
                 .background { if tab == index { RoundedRectangle(cornerRadius: 21).fill(Color.accentGreen.opacity(0.085)).matchedGeometryEffect(id: "nav", in: navSelection) } }
         }.buttonStyle(SoftPressStyle()).accessibilityAddTraits(tab == index ? .isSelected : [])
             .anchorPreference(key: NavAnchors.self, value: .bounds) { [index: $0] }
-            .accessibilityIdentifier("nav.\(index)").accessibilityLabel(titles[index] + (index == 2 && store.unread > 0 ? "，\(store.unread)条未读" : ""))
+            .accessibilityIdentifier("nav.\(index)").accessibilityLabel(titles[index] + (index == 3 && store.unread > 0 ? "，\(store.unread)条未读" : ""))
     }
     func select(_ index: Int) {
         guard index != tab else { return }
@@ -95,8 +86,8 @@ struct NavigationShell: View {
                 Color.black.opacity(0.55).mask { SpotlightCutout(rect: focus).fill(style: FillStyle(eoFill: true)) }.contentShape(Rectangle()).onTapGesture {}
                 VStack(alignment: .leading, spacing: 14) {
                     HStack { Text("\(guideStep + 1) / 3").font(.caption.monospaced()).foregroundStyle(Color.accentGreen); Spacer(); Button("跳过引导") { finishTour() }.font(.caption).frame(minHeight: 44) }
-                    Text(["常用操作，就在手边", "把想法变成一场相聚", "每一次参与都有回应"][guideStep]).font(.title3.bold())
-                    Text(["发现页底部可以切换空间、搜索、选择兴趣和筛选。面板上拉展开，下拉收起。", "点底部加号创建活动。先选空间和报名学校，再预览发布。", "报名通知和活动讨论在消息中查看。收藏和关注可在底部提示条里撤销。"][guideStep]).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(["常用操作，就在手边", "下一场，挑战新可能", "每一次参与都有回应"][guideStep]).font(.title3.bold())
+                    Text(["发现页底部可以切换空间、搜索、选择兴趣和筛选。面板上拉展开，下拉收起。", "赛事独立汇集 AI 比赛。按地区找赛场，查看赛历和时间进度；发布活动从发现页右上角或活动页进入。", "报名通知和活动讨论在消息中查看。收藏和关注可在底部提示条里撤销。"][guideStep]).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Button(guideStep == 2 ? "开始体验" : "下一步") { if guideStep == 2 { finishTour() } else { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { guideStep += 1 } } }.buttonStyle(QuietButton())
                 }.padding(22).background(Color.paper, in: RoundedRectangle(cornerRadius: 25)).padding(.horizontal, 22).padding(.bottom, clearance)
             }.accessibilityElement(children: .contain).accessibilityAddTraits(.isModal)
