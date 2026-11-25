@@ -1,16 +1,39 @@
 import Foundation
 import Observation
 
+private final class CompetitionRedirectPolicy: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        guard let url = request.url, CompetitionSource.isSourceURL(url),
+              let original = task.originalRequest?.url,
+              !CompetitionSource.isChinaFeed(original) || original.path == url.path else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
+    }
+}
+
 struct CompetitionClient {
     var session: URLSession = .shared
     func html(at url: URL) async throws -> String {
-        guard url.scheme == "https", url.host == "competehub.dev" else { throw CompetitionLoadError.unavailable }
+        guard CompetitionSource.isSourceURL(url) else { throw CompetitionLoadError.unavailable }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.setValue("text/html", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
+        let limit = 8_000_000
+        let (bytes, response) = try await session.bytes(for: request, delegate: CompetitionRedirectPolicy())
+        defer { bytes.task.cancel() }
         guard let response = response as? HTTPURLResponse, response.statusCode == 200,
-              response.url?.host == "competehub.dev", (!CompetitionSource.isChinaFeed(url) || response.url?.path == url.path), data.count < 8_000_000,
-              let html = String(data: data, encoding: .utf8) else { throw CompetitionLoadError.unavailable }
+              let finalURL = response.url, CompetitionSource.isSourceURL(finalURL),
+              !CompetitionSource.isChinaFeed(url) || finalURL.path == url.path,
+              response.expectedContentLength < Int64(limit) else { throw CompetitionLoadError.unavailable }
+        var data = Data()
+        for try await byte in bytes {
+            guard data.count < limit - 1 else { throw CompetitionLoadError.unavailable }
+            data.append(byte)
+        }
+        guard let html = String(data: data, encoding: .utf8) else { throw CompetitionLoadError.unavailable }
         return html
     }
     func feed(at url: URL) async throws -> CompetitionFeed {

@@ -98,6 +98,25 @@ final class CompetitionTests: XCTestCase {
         XCTAssertEqual(CompetitionSource.feedURL().path, "/zh/regions/China/All")
         XCTAssertEqual(CompetitionSource.feedURL(city: "Changsha").path, "/zh/regions/China/Changsha")
     }
+    func testFeedTransportPolicy() throws {
+        let feed = CompetitionSource.feedURL()
+        XCTAssertTrue(CompetitionSource.isSourceURL(feed))
+        XCTAssertTrue(CompetitionSource.isSourceURL(try XCTUnwrap(URL(string: "https://competehub.dev:443/zh"))))
+        for value in ["http://competehub.dev/zh", "https://example.org/zh", "https://competehub.dev:8443/zh"] {
+            XCTAssertFalse(CompetitionSource.isSourceURL(try XCTUnwrap(URL(string: value))))
+        }
+    }
+
+    func testBoundedClientReadsNormalFeedResponse() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FixtureCompetitionProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let client = CompetitionClient(session: session)
+        let page = try await client.html(at: CompetitionSource.feedURL())
+        XCTAssertEqual(page, "<html>赛事</html>")
+    }
+
     func testOnlyChinaFeedsAreAccepted() throws {
         for path in [["zh"], ["zh", "competitions"], ["zh", "regions", "Europe", "All"], ["zh", "regions", "North America", "New York"]] {
             let url = CompetitionSource.url(path: path)
@@ -155,5 +174,20 @@ private final class OfflineCompetitionProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() { client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet)) }
+    override func stopLoading() {}
+}
+
+
+private final class FixtureCompetitionProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let body = Data("<html>赛事</html>".utf8)
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+                                       headerFields: ["Content-Type": "text/html"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
     override func stopLoading() {}
 }

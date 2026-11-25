@@ -132,9 +132,13 @@ enum CompetitionSource {
     static func feedURL(city: String = "All") -> URL {
         url(path: ["zh", "regions", "China", city])
     }
+    static func isSourceURL(_ url: URL) -> Bool {
+        url.scheme == "https" && url.host == "competehub.dev" && (url.port == nil || url.port == 443) &&
+            url.user == nil && url.password == nil
+    }
     static func isChinaFeed(_ url: URL) -> Bool {
         let components = url.pathComponents
-        return url.scheme == "https" && url.host == "competehub.dev" && url.user == nil && url.password == nil &&
+        return isSourceURL(url) &&
             components.count == 5 && Array(components.prefix(4)) == ["/", "zh", "regions", "China"]
     }
 }
@@ -208,7 +212,7 @@ enum CompeteHubParser {
         for match in links.matches(in: html, range: NSRange(html.startIndex..., in: html)) {
             guard let range = Range(match.range(at: 1), in: html),
                   let candidate = URL(string: String(html[range]).replacingOccurrences(of: "&amp;", with: "&"), relativeTo: url)?.absoluteURL,
-                  CompetitionSource.isChinaFeed(candidate), candidate.path == url.path,
+                  CompetitionSource.isChinaFeed(candidate), candidate.path == url.path, current < Int.max,
                   URLComponents(url: candidate, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "page" })?.value == String(current + 1) else { continue }
             next = candidate; break
         }
